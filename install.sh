@@ -65,7 +65,10 @@ install_macos_packages() {
 
 install_debian_packages() {
   info "Updating apt package index (sudo)..."
-  sudo apt update -y
+  # Don't abort the whole install if `apt update` reports an error — a single
+  # broken third-party repo (bad signature, EOL suite, etc.) shouldn't stop us
+  # from installing packages, since the working repos still refreshed.
+  sudo apt update -y || warn "apt update reported errors (likely an unrelated repo); continuing."
   info "Installing apt packages..."
   # Install one at a time so a single unavailable package doesn't abort the run.
   while IFS= read -r pkg; do
