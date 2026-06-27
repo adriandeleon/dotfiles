@@ -14,6 +14,7 @@ tree
 htop
 tmux
 neovim
+jed              # lightweight text editor
 zoxide           # smarter cd
 eza              # modern ls
 tldr             # simplified man pages

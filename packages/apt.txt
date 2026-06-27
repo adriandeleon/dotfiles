@@ -18,6 +18,7 @@ tree
 htop
 tmux
 neovim
+jed              # lightweight text editor
 zoxide           # smarter cd
 tldr             # simplified man pages
 p7zip-full       # 7z archives
