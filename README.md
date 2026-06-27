@@ -11,6 +11,9 @@ of those keeps only the genuinely shell-specific bits (the Oh My Bash/Zsh
 framework + agnoster theme). The installer **appends** them to your existing
 `~/.bashrc` / `~/.zshrc` rather than replacing those files.
 
+> Already set up? Run **`dothelp`** in any bash or zsh session for a cheat-sheet
+> of the aliases, functions, fzf helpers, and tools this config adds.
+
 ## Layout
 
 ```
