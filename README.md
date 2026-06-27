@@ -49,16 +49,17 @@ The installer:
 3. Installs [SDKMAN](https://sdkman.io/) (JVM SDK manager) via its own script
    if it isn't already present. It's wired up for both shells in
    `shell/common.sh`.
-4. Clones [Oh My Bash](https://github.com/ohmybash/oh-my-bash) and
-   [Oh My Zsh](https://github.com/ohmyzsh/ohmyzsh) into `~/.oh-my-bash` and
-   `~/.oh-my-zsh` (the **agnoster** theme is enabled for both).
+4. Clones the framework for your platform — [Oh My Bash](https://github.com/ohmybash/oh-my-bash)
+   into `~/.oh-my-bash` on Debian, or [Oh My Zsh](https://github.com/ohmyzsh/ohmyzsh)
+   into `~/.oh-my-zsh` on macOS (the **agnoster** theme is enabled either way).
 5. Installs the **JetBrains Mono Nerd Font** so the agnoster glyphs render: a
    Homebrew cask on macOS, or the Nerd Fonts release archive into
    `~/.local/share/fonts` on Debian (then refreshes the font cache).
-6. **Adds the config to your existing rc files without replacing them.** It
-   backs up `~/.bashrc` / `~/.zshrc` (timestamped copy) and appends a small
-   managed include block that sources this repo's `bash/bashrc` / `zsh/zshrc`.
-   Your original settings stay in place above the block.
+6. **Adds the config to your existing rc file without replacing it.** For the
+   platform's native shell (`~/.bashrc` on Debian, `~/.zshrc` on macOS) it backs
+   up the file (timestamped copy) and appends a small managed include block that
+   sources this repo's `bash/bashrc` / `zsh/zshrc`. Your original settings stay
+   in place above the block.
 
 > **Font note:** the agnoster theme uses Powerline glyphs (arrows, branch
 > symbol). The installer puts JetBrains Mono Nerd Font on the machine, but you
@@ -102,8 +103,9 @@ the binary-name differences:
 | mc   | `midnight-commander` | `mc`      | `mc`             | —                |
 | ncat | (bundled with `nmap`)| `ncat`    | `ncat`           | —                |
 
-`eza` is listed in both package files, but it's only packaged by apt on Debian
-13+/Ubuntu 24.04. On older releases the apt install step warns and skips it, and
-the `ls`/`ll`/`la` aliases fall back to coloured `ls` when `eza` isn't present.
-Likewise `btop` and `fastfetch` need a recent Debian; they'll skip gracefully on
-older ones (the installer installs apt packages one at a time for this reason).
+`eza`, `btop`, and `fastfetch` are only packaged by apt on Debian 13+/Ubuntu
+24.04. The installer runs a single `apt install` for the whole list, so on an
+older release where one of these is missing apt installs **none** of them — drop
+the unavailable packages from `packages/apt.txt` (or upgrade the release) and
+re-run. The `ls`/`ll`/`la` aliases fall back to coloured `ls` when `eza` is
+absent, so missing it isn't fatal to day-to-day use.

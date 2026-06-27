@@ -3,9 +3,11 @@
 #
 #   1. Detects the OS.
 #   2. Installs the CLI packages listed in packages/{brew,apt}.txt, plus SDKMAN,
-#      the Oh My Bash / Oh My Zsh frameworks, and the JetBrains Mono Nerd Font.
-#   3. Adds the shell config to your existing ~/.bashrc and ~/.zshrc by backing
-#      them up and appending an include block (your files are NOT replaced).
+#      the platform's shell framework (Oh My Bash on Debian, Oh My Zsh on
+#      macOS), and the JetBrains Mono Nerd Font.
+#   3. Adds the shell config to the native rc file (~/.bashrc on Debian,
+#      ~/.zshrc on macOS) by backing it up and appending an include block (your
+#      file is NOT replaced).
 #
 # Safe to re-run: the include block is added only once; backups are timestamped.
 #
@@ -70,17 +72,13 @@ install_debian_packages() {
   # from installing packages, since the working repos still refreshed.
   sudo apt update -y || warn "apt update reported errors (likely an unrelated repo); continuing."
   info "Installing apt packages..."
-  # Install one at a time so a single unavailable package doesn't abort the run.
-  while IFS= read -r pkg; do
-    [ -n "$pkg" ] || continue
-    if sudo apt install -y --no-install-recommends "$pkg"; then
-      :
-    else
-      warn "Could not install '$pkg'; skipping."
-    fi
-  done <<EOF
-$(read_packages "$DOTFILES_DIR/packages/apt.txt")
-EOF
+  # A single apt install for the whole list. If a package is unavailable on
+  # this release (e.g. eza/btop/fastfetch on older Debian) apt installs none of
+  # them — drop it from packages/apt.txt or upgrade the release.
+  # shellcheck disable=SC2046
+  sudo apt install -y --no-install-recommends \
+    $(read_packages "$DOTFILES_DIR/packages/apt.txt") \
+    || warn "Some apt packages failed to install; continuing."
 }
 
 # --- SDKMAN (JVM SDK manager) ------------------------------------------------
@@ -108,8 +106,12 @@ clone_repo() {
 }
 
 install_shell_frameworks() {
-  clone_repo "https://github.com/ohmybash/oh-my-bash.git" "$HOME/.oh-my-bash" "Oh My Bash"
-  clone_repo "https://github.com/ohmyzsh/ohmyzsh.git"     "$HOME/.oh-my-zsh"  "Oh My Zsh"
+  # One framework per platform: Oh My Bash on Debian, Oh My Zsh on macOS.
+  case "$OS" in
+    macos)  clone_repo "https://github.com/ohmyzsh/ohmyzsh.git"     "$HOME/.oh-my-zsh"  "Oh My Zsh" ;;
+    debian) clone_repo "https://github.com/ohmybash/oh-my-bash.git" "$HOME/.oh-my-bash" "Oh My Bash" ;;
+    *) warn "No shell framework configured for OS '$OS'; skipping." ;;
+  esac
 }
 
 # --- JetBrains Mono Nerd Font ------------------------------------------------
@@ -206,10 +208,11 @@ include_config() {
 if [ "$DO_LINK" -eq 1 ]; then
   info "Configuring shell startup files (existing files are backed up, not replaced)..."
 
-  # Append to both rc files so the same config applies whether you're in bash
-  # (Debian) or zsh (macOS), and keeps working if you switch shells.
-  include_config "$DOTFILES_DIR/bash/bashrc" "$HOME/.bashrc"
-  include_config "$DOTFILES_DIR/zsh/zshrc"   "$HOME/.zshrc"
+  # Configure the native shell for this platform: bash on Debian, zsh on macOS.
+  case "$OS" in
+    macos)  include_config "$DOTFILES_DIR/zsh/zshrc"   "$HOME/.zshrc" ;;
+    *)      include_config "$DOTFILES_DIR/bash/bashrc" "$HOME/.bashrc" ;;
+  esac
 
   info "Done. Restart your shell or run: exec \"\$SHELL\" -l"
 else
