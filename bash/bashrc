@@ -1,0 +1,37 @@
+# ~/.bashrc — Debian / bash entry point.
+# Symlinked from the dotfiles repo by install.sh.
+
+# If not running interactively, don't do anything.
+case $- in
+  *i*) ;;
+  *) return ;;
+esac
+
+# Location of the dotfiles checkout (override in ~/.shell.local if needed).
+export DOTFILES="${DOTFILES:-$HOME/.dotfiles}"
+
+# --- Bash-specific options ---------------------------------------------------
+shopt -s histappend       # append to history, don't overwrite
+shopt -s checkwinsize     # update LINES/COLUMNS after each command
+shopt -s globstar 2>/dev/null  # ** recursive globbing
+HISTCONTROL=ignoreboth    # no duplicate lines or lines starting with space
+
+# --- Prompt ------------------------------------------------------------------
+# Show git branch in the prompt when inside a repo.
+_git_branch() {
+  git rev-parse --abbrev-ref HEAD 2>/dev/null | sed 's/.*/ (&)/'
+}
+if [ -n "$SSH_CONNECTION" ]; then _host="\[\e[33m\]\u@\h\[\e[0m\]:"; else _host=""; fi
+PS1="${_host}\[\e[34m\]\w\[\e[32m\]\$(_git_branch)\[\e[0m\]\$ "
+
+# --- Completion --------------------------------------------------------------
+if ! shopt -oq posix; then
+  if [ -f /usr/share/bash-completion/bash_completion ]; then
+    . /usr/share/bash-completion/bash_completion
+  elif [ -f /etc/bash_completion ]; then
+    . /etc/bash_completion
+  fi
+fi
+
+# --- Shared configuration (aliases, exports, functions, tooling) -------------
+[ -r "$DOTFILES/shell/common.sh" ] && . "$DOTFILES/shell/common.sh"

@@ -1,0 +1,21 @@
+# Homebrew packages (macOS). One package per line; '#' starts a comment.
+# Keep this in sync with packages/apt.txt — same CLI tools, brew names.
+
+git
+curl
+wget
+coreutils        # GNU coreutils (matches Debian's default userland)
+ripgrep          # rg — fast grep
+fd               # fd — fast find
+bat              # cat with syntax highlighting
+fzf              # fuzzy finder
+jq               # JSON processor
+tree
+htop
+tmux
+neovim
+zoxide           # smarter cd
+eza              # modern ls
+tldr             # simplified man pages
+p7zip            # 7z archives
+bash-completion@2
