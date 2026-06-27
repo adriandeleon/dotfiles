@@ -14,6 +14,25 @@ framework + agnoster theme). The installer **appends** them to your existing
 > Already set up? Run **`dothelp`** in any bash or zsh session for a cheat-sheet
 > of the aliases, functions, fzf helpers, and tools this config adds.
 
+## What you get
+
+- **Shared shell config** for bash (Debian) and zsh (macOS) — the same aliases,
+  environment, and functions in both, from POSIX scripts under `shell/`.
+- **Oh My Bash / Oh My Zsh** with the **agnoster** theme and the **JetBrains
+  Mono Nerd Font** for the prompt glyphs.
+- **[SDKMAN](https://sdkman.io/)** for managing JVM SDKs (`sdk install …`).
+- A curated **CLI toolset**, installed via apt or Homebrew:
+  - *search & files:* ripgrep (`rg`), fd, bat, fzf, eza, tree, mc, ncdu, duf
+  - *system:* htop, btop, fastfetch, tmux
+  - *network:* nmap, ncat
+  - *editors:* neovim, emacs, jed
+  - *other:* git, jq, zoxide (`z`), tldr, plus build/archive basics
+- Handy **aliases, functions, and fzf helpers**, discoverable any time with
+  **`dothelp`**.
+
+Tested on **Debian 13 (trixie)** and **macOS**. A leaner subset is available via
+`./install.sh --minimal` (see [Install](#install)).
+
 ## Layout
 
 ```
@@ -66,6 +85,13 @@ The installer:
    Debian (sourced natively by the stock `~/.bashrc`) or `~/.zsh_aliases` on
    macOS — both pointing at `shell/aliases.sh`. Any existing file there is backed
    up first. Edit your aliases at that path or in the repo; it's the same file.
+8. **Prints a summary** of exactly what it changed (and where it put backups).
+
+When it finishes, **reload your shell** to pick up the changes:
+
+```sh
+exec "$SHELL" -l    # or just open a new terminal
+```
 
 > **Font note:** the agnoster theme uses Powerline glyphs (arrows, branch
 > symbol). The installer puts JetBrains Mono Nerd Font on the machine, but you
