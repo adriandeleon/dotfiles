@@ -19,14 +19,18 @@ HISTCONTROL=ignoreboth    # no duplicate lines or lines starting with space
 
 # --- Oh My Bash --------------------------------------------------------------
 # Framework lives in ~/.oh-my-bash (cloned by install.sh). It owns the prompt
-# (agnoster theme) and completion. Source it *before* the shared config so our
-# aliases/exports below take precedence over the framework's defaults.
+# (agnoster theme) and completion.
+#
+# Your aliases live in ~/.bash_aliases (a symlink to shell/aliases.sh, set up
+# by install.sh), which Debian's stock ~/.bashrc sources *before* this block.
+# So we deliberately load NO alias/plugin modules here — otherwise Oh My Bash
+# would redefine ll/la/git aliases and clobber yours. Completion only.
 export OSH="$HOME/.oh-my-bash"
 OSH_THEME="agnoster"                 # needs a Powerline/Nerd font to render
 DISABLE_AUTO_UPDATE="true"
 completions=(git ssh)
-aliases=(general)
-plugins=(git)
+aliases=()
+plugins=()
 [ -r "$OSH/oh-my-bash.sh" ] && source "$OSH/oh-my-bash.sh"
 
 # --- Shared configuration (aliases, exports, functions, tooling) -------------
