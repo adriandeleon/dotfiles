@@ -2,15 +2,17 @@
 # install.sh — bootstrap dotfiles on macOS (zsh/brew) or Debian (bash/apt).
 #
 #   1. Detects the OS.
-#   2. Installs the CLI packages listed in packages/{brew,apt}.txt.
-#   3. Symlinks the shell config into place (~/.bashrc or ~/.zshrc).
+#   2. Installs the CLI packages listed in packages/{brew,apt}.txt, plus SDKMAN
+#      and the Oh My Bash / Oh My Zsh frameworks.
+#   3. Adds the shell config to your existing ~/.bashrc and ~/.zshrc by backing
+#      them up and appending an include block (your files are NOT replaced).
 #
-# Safe to re-run: existing files are backed up, symlinks are refreshed.
+# Safe to re-run: the include block is added only once; backups are timestamped.
 #
 # Usage:
-#   ./install.sh            # install packages + link config
-#   ./install.sh --link     # only (re)create symlinks, skip packages
-#   ./install.sh --packages # only install packages, skip symlinks
+#   ./install.sh            # install packages + configure shell
+#   ./install.sh --link     # only configure the shell rc files, skip packages
+#   ./install.sh --packages # only install packages, skip shell config
 
 set -euo pipefail
 
@@ -89,6 +91,24 @@ install_sdkman() {
   curl -s "https://get.sdkman.io" | bash || warn "SDKMAN install failed; skipping."
 }
 
+# --- Shell frameworks (Oh My Bash / Oh My Zsh) -------------------------------
+# Cloned directly (not via their curl installers, which would rewrite the rc
+# files). Both are plain git repos; the rc fragments enable the agnoster theme.
+clone_repo() {
+  # clone_repo <url> <dest> <name>
+  if [ -d "$2" ]; then
+    info "$3 already installed."
+  else
+    info "Installing $3..."
+    git clone --depth=1 "$1" "$2" || warn "$3 clone failed; skipping."
+  fi
+}
+
+install_shell_frameworks() {
+  clone_repo "https://github.com/ohmybash/oh-my-bash.git" "$HOME/.oh-my-bash" "Oh My Bash"
+  clone_repo "https://github.com/ohmyzsh/ohmyzsh.git"     "$HOME/.oh-my-zsh"  "Oh My Zsh"
+}
+
 if [ "$DO_PACKAGES" -eq 1 ]; then
   case "$OS" in
     macos)  install_macos_packages ;;
@@ -96,43 +116,54 @@ if [ "$DO_PACKAGES" -eq 1 ]; then
     *) warn "No package installer for OS '$OS'; skipping packages." ;;
   esac
   install_sdkman
+  install_shell_frameworks
 else
   info "Skipping package installation (--link)."
 fi
 
-# --- Symlink helper ----------------------------------------------------------
-link() {
-  # link <source-in-repo> <target-in-home>
+# --- Include helper ----------------------------------------------------------
+# Rather than replacing your rc files, we back them up and append a small block
+# that sources the matching file from this repo. Re-running is idempotent: the
+# block is added only once (detected by the marker), and your original content
+# is preserved above it.
+BLOCK_BEGIN="# >>> dotfiles (managed by install.sh) >>>"
+BLOCK_END="# <<< dotfiles (managed by install.sh) <<<"
+
+include_config() {
+  # include_config <source-in-repo> <target-rc>
   src="$1"; dst="$2"
-  if [ -L "$dst" ] && [ "$(readlink "$dst")" = "$src" ]; then
-    info "Already linked: $dst"
+
+  [ -e "$dst" ] || { touch "$dst"; info "Created $dst"; }
+
+  if grep -qF "$BLOCK_BEGIN" "$dst" 2>/dev/null; then
+    info "Already configured: $dst"
     return
   fi
-  if [ -e "$dst" ] || [ -L "$dst" ]; then
-    backup="$dst.backup.$(date +%Y%m%d%H%M%S)"
-    warn "Backing up existing $dst -> $backup"
-    mv "$dst" "$backup"
-  fi
-  ln -s "$src" "$dst"
-  info "Linked $dst -> $src"
+
+  # Back up the original (a copy — the file stays in place) before appending.
+  backup="$dst.backup.$(date +%Y%m%d%H%M%S)"
+  cp "$dst" "$backup"
+  info "Backed up $dst -> $backup"
+
+  {
+    printf '\n%s\n' "$BLOCK_BEGIN"
+    printf 'export DOTFILES="%s"\n' "$DOTFILES_DIR"
+    printf '[ -r "%s" ] && . "%s"\n' "$src" "$src"
+    printf '%s\n' "$BLOCK_END"
+  } >> "$dst"
+  info "Appended dotfiles include to $dst"
 }
 
-# --- Create symlinks ---------------------------------------------------------
+# --- Wire up the shell configuration -----------------------------------------
 if [ "$DO_LINK" -eq 1 ]; then
-  info "Linking shell configuration..."
+  info "Configuring shell startup files (existing files are backed up, not replaced)..."
 
-  # Make the repo discoverable at the conventional path ~/.dotfiles so that
-  # the rc files can locate shell/common.sh regardless of where it's cloned.
-  if [ "$DOTFILES_DIR" != "$HOME/.dotfiles" ]; then
-    link "$DOTFILES_DIR" "$HOME/.dotfiles"
-  fi
-
-  # Link both rc files so the same config applies whether you're in bash
+  # Append to both rc files so the same config applies whether you're in bash
   # (Debian) or zsh (macOS), and keeps working if you switch shells.
-  link "$DOTFILES_DIR/bash/bashrc" "$HOME/.bashrc"
-  link "$DOTFILES_DIR/zsh/zshrc"   "$HOME/.zshrc"
+  include_config "$DOTFILES_DIR/bash/bashrc" "$HOME/.bashrc"
+  include_config "$DOTFILES_DIR/zsh/zshrc"   "$HOME/.zshrc"
 
   info "Done. Restart your shell or run: exec \"\$SHELL\" -l"
 else
-  info "Skipping symlinks (--packages)."
+  info "Skipping shell configuration (--packages)."
 fi

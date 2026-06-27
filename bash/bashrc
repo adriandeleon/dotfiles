@@ -1,5 +1,6 @@
-# ~/.bashrc — Debian / bash entry point.
-# Symlinked from the dotfiles repo by install.sh.
+# ~/.bashrc — Debian / bash configuration.
+# Sourced from your existing ~/.bashrc by an include block that install.sh
+# appends (your original file is backed up, never replaced).
 
 # If not running interactively, don't do anything.
 case $- in
@@ -16,22 +17,17 @@ shopt -s checkwinsize     # update LINES/COLUMNS after each command
 shopt -s globstar 2>/dev/null  # ** recursive globbing
 HISTCONTROL=ignoreboth    # no duplicate lines or lines starting with space
 
-# --- Prompt ------------------------------------------------------------------
-# Show git branch in the prompt when inside a repo.
-_git_branch() {
-  git rev-parse --abbrev-ref HEAD 2>/dev/null | sed 's/.*/ (&)/'
-}
-if [ -n "$SSH_CONNECTION" ]; then _host="\[\e[33m\]\u@\h\[\e[0m\]:"; else _host=""; fi
-PS1="${_host}\[\e[34m\]\w\[\e[32m\]\$(_git_branch)\[\e[0m\]\$ "
-
-# --- Completion --------------------------------------------------------------
-if ! shopt -oq posix; then
-  if [ -f /usr/share/bash-completion/bash_completion ]; then
-    . /usr/share/bash-completion/bash_completion
-  elif [ -f /etc/bash_completion ]; then
-    . /etc/bash_completion
-  fi
-fi
+# --- Oh My Bash --------------------------------------------------------------
+# Framework lives in ~/.oh-my-bash (cloned by install.sh). It owns the prompt
+# (agnoster theme) and completion. Source it *before* the shared config so our
+# aliases/exports below take precedence over the framework's defaults.
+export OSH="$HOME/.oh-my-bash"
+OSH_THEME="agnoster"                 # needs a Powerline/Nerd font to render
+DISABLE_AUTO_UPDATE="true"
+completions=(git ssh)
+aliases=(general)
+plugins=(git)
+[ -r "$OSH/oh-my-bash.sh" ] && source "$OSH/oh-my-bash.sh"
 
 # --- Shared configuration (aliases, exports, functions, tooling) -------------
 [ -r "$DOTFILES/shell/common.sh" ] && . "$DOTFILES/shell/common.sh"

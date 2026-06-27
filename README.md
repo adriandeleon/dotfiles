@@ -5,16 +5,17 @@ macOS**, plus a one-shot installer that sets up the same CLI tools on both
 (Homebrew on macOS, apt on Debian).
 
 The idea: aliases, environment variables, and functions live once in
-`shell/` as POSIX-compatible scripts. Both `~/.bashrc` and `~/.zshrc` source
+`shell/` as POSIX-compatible scripts. Both `bash/bashrc` and `zsh/zshrc` source
 them, so the day-to-day experience is identical regardless of the shell. Each
-rc file only keeps the genuinely shell-specific bits (prompt, history options,
-completion).
+of those keeps only the genuinely shell-specific bits (the Oh My Bash/Zsh
+framework + agnoster theme). The installer **appends** them to your existing
+`~/.bashrc` / `~/.zshrc` rather than replacing those files.
 
 ## Layout
 
 ```
 .
-├── install.sh            # bootstrap: install packages + symlink config
+├── install.sh            # bootstrap: install packages + configure shells
 ├── packages/
 │   ├── apt.txt           # CLI tools for Debian (apt)
 │   └── brew.txt          # the same CLI tools for macOS (Homebrew)
@@ -22,11 +23,11 @@ completion).
 │   ├── common.sh         #   entry point sourced by both shells
 │   ├── exports.sh        #   environment variables (EDITOR, PATH, history…)
 │   ├── aliases.sh        #   aliases (ls/eza, git, navigation…)
-│   └── functions.sh      #   functions (mkcd, extract, up…)
+│   └── functions.sh      #   functions (mkcd, extract, fzf helpers…)
 ├── bash/
-│   └── bashrc            # ~/.bashrc — bash-specific + sources shell/common.sh
+│   └── bashrc            # Oh My Bash (agnoster) + sources shell/common.sh
 └── zsh/
-    └── zshrc             # ~/.zshrc — zsh-specific + sources shell/common.sh
+    └── zshrc             # Oh My Zsh (agnoster) + sources shell/common.sh
 ```
 
 ## Install
@@ -45,19 +46,28 @@ The installer:
 3. Installs [SDKMAN](https://sdkman.io/) (JVM SDK manager) via its own script
    if it isn't already present. It's wired up for both shells in
    `shell/common.sh`.
-4. Backs up any existing `~/.bashrc` / `~/.zshrc` and replaces them with
-   symlinks into this repo. It also symlinks the repo to `~/.dotfiles` if you
-   cloned it elsewhere.
+4. Clones [Oh My Bash](https://github.com/ohmybash/oh-my-bash) and
+   [Oh My Zsh](https://github.com/ohmyzsh/ohmyzsh) into `~/.oh-my-bash` and
+   `~/.oh-my-zsh` (the **agnoster** theme is enabled for both).
+5. **Adds the config to your existing rc files without replacing them.** It
+   backs up `~/.bashrc` / `~/.zshrc` (timestamped copy) and appends a small
+   managed include block that sources this repo's `bash/bashrc` / `zsh/zshrc`.
+   Your original settings stay in place above the block.
+
+> **Font note:** the agnoster theme uses Powerline glyphs (arrows, branch
+> symbol). Use a **Powerline-patched or Nerd Font** in your terminal, otherwise
+> the prompt shows `?`/box characters.
 
 Options:
 
 ```sh
-./install.sh --link       # only (re)create symlinks, skip packages
-./install.sh --packages   # only install packages, skip symlinks
+./install.sh --link       # only configure the rc files, skip packages
+./install.sh --packages   # only install packages, skip shell config
 ./install.sh --help
 ```
 
-It is safe to re-run; existing files are timestamped and backed up.
+It is safe to re-run; the include block is added only once and backups are
+timestamped.
 
 ## Customizing
 
