@@ -78,12 +78,24 @@ $(read_packages "$DOTFILES_DIR/packages/apt.txt")
 EOF
 }
 
+# --- SDKMAN (JVM SDK manager) ------------------------------------------------
+# Installed via its own script (not apt/brew); same on macOS and Debian.
+install_sdkman() {
+  if [ -d "$HOME/.sdkman" ]; then
+    info "SDKMAN already installed."
+    return
+  fi
+  info "Installing SDKMAN..."
+  curl -s "https://get.sdkman.io" | bash || warn "SDKMAN install failed; skipping."
+}
+
 if [ "$DO_PACKAGES" -eq 1 ]; then
   case "$OS" in
     macos)  install_macos_packages ;;
     debian) install_debian_packages ;;
     *) warn "No package installer for OS '$OS'; skipping packages." ;;
   esac
+  install_sdkman
 else
   info "Skipping package installation (--link)."
 fi

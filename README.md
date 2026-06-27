@@ -42,7 +42,10 @@ The installer:
 1. Detects the OS (macOS vs Debian).
 2. Installs the packages from `packages/brew.txt` or `packages/apt.txt`
    (installing Homebrew first on macOS if needed).
-3. Backs up any existing `~/.bashrc` / `~/.zshrc` and replaces them with
+3. Installs [SDKMAN](https://sdkman.io/) (JVM SDK manager) via its own script
+   if it isn't already present. It's wired up for both shells in
+   `shell/common.sh`.
+4. Backs up any existing `~/.bashrc` / `~/.zshrc` and replaces them with
    symlinks into this repo. It also symlinks the repo to `~/.dotfiles` if you
    cloned it elsewhere.
 

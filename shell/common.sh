@@ -41,6 +41,11 @@ fi
 
 unset _dotfiles_shell
 
+# SDKMAN — JVM SDK manager (java, gradle, maven…). Its init script supports
+# both bash and zsh; source it if installed.
+export SDKMAN_DIR="${SDKMAN_DIR:-$HOME/.sdkman}"
+[ -s "$SDKMAN_DIR/bin/sdkman-init.sh" ] && . "$SDKMAN_DIR/bin/sdkman-init.sh"
+
 # --- Local, machine-specific overrides --------------------------------------
 # Not tracked in git — put secrets / per-host tweaks here.
 [ -r "$HOME/.shell.local" ] && . "$HOME/.shell.local"
