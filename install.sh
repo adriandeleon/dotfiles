@@ -36,7 +36,7 @@ OS="unknown"
 case "$(uname -s)" in
   Darwin) OS="macos" ;;
   Linux)
-    if command -v apt-get >/dev/null 2>&1; then OS="debian"; else OS="linux"; fi
+    if command -v apt >/dev/null 2>&1; then OS="debian"; else OS="linux"; fi
     ;;
 esac
 info "Detected OS: $OS"
@@ -63,12 +63,12 @@ install_macos_packages() {
 
 install_debian_packages() {
   info "Updating apt package index (sudo)..."
-  sudo apt-get update -y
+  sudo apt update -y
   info "Installing apt packages..."
   # Install one at a time so a single unavailable package doesn't abort the run.
   while IFS= read -r pkg; do
     [ -n "$pkg" ] || continue
-    if sudo apt-get install -y --no-install-recommends "$pkg"; then
+    if sudo apt install -y --no-install-recommends "$pkg"; then
       :
     else
       warn "Could not install '$pkg'; skipping."
