@@ -18,6 +18,7 @@ tree
 htop
 tmux
 neovim
+emacs            # provides emacsclient (the `ec` alias)
 jed              # lightweight text editor
 zoxide           # smarter cd
 tldr             # simplified man pages
