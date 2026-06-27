@@ -65,3 +65,59 @@ fd-fp() {
 find-fp() {
   find . -type f | fzf --preview "$_BAT --style=numbers --color=always {}"
 }
+
+# --- Help --------------------------------------------------------------------
+# dothelp — a cheat-sheet of what this dotfiles setup adds to your shell.
+# Run `dothelp` (works the same in bash and zsh) to print it any time.
+dothelp() {
+  # Colours, but only when writing to a terminal.
+  if [ -t 1 ]; then
+    h=$(printf '\033[1;36m'); k=$(printf '\033[1;32m')
+    d=$(printf '\033[0;90m'); z=$(printf '\033[0m')
+  else
+    h=; k=; d=; z=
+  fi
+
+  # Pad the (plain) key to a fixed width, then wrap with colour *outside* the
+  # field so the escape bytes don't throw off column alignment.
+  row() { printf '  %s%-18s%s %s\n' "$k" "$1" "$z" "$2"; }
+
+  printf '%s\n' "${h}dotfiles — shell cheat-sheet${z} ${d}(run 'dothelp' anytime)${z}"
+  printf '%s\n\n' "${d}Oh My Bash/Zsh + agnoster · shared config in \$DOTFILES (${DOTFILES})${z}"
+
+  printf '%s\n' "${h}Listing${z}"
+  row "ls ll la lt"   "eza with icons (falls back to coloured ls)"
+
+  printf '\n%s\n' "${h}Editors${z}"
+  row "vi vim"           "→ nvim"
+  row "ovim"             "→ the original /usr/bin/vim"
+  row "ec"               "→ emacsclient"
+  row "edi edis ediz"    "editora: normal / simple-ui / zen"
+  row "edif edifs edifz" "editora + fzf file picker"
+
+  printf '\n%s\n' "${h}Git${z}"
+  row "g gs gd ga gc"  "git / status / diff / add / commit"
+  row "gco gp gl glog" "checkout / push / pull / graph log"
+
+  printf '\n%s\n' "${h}Navigation${z}"
+  row ".. ... ...." "cd up 1 / 2 / 3 levels"
+  row "up [n]"      "cd up n levels (default 1)"
+  row "z <dir>"     "jump to a frecent dir (zoxide)"
+
+  printf '\n%s\n' "${h}Functions${z}"
+  row "mkcd <dir>"    "make a directory and cd into it"
+  row "extract <file>" "extract any common archive type"
+
+  printf '\n%s\n' "${h}fzf helpers${z}"
+  row "fh"            "fuzzy-search shell history"
+  row "ff fdf"        "fuzzy-pick a file (find / fd)"
+  row "cdf"           "fuzzy-pick a directory and cd"
+  row "vimf"          "fuzzy-pick a file, open in \$EDITOR"
+  row "fd-fp find-fp" "fuzzy-pick a file with a bat preview"
+
+  printf '\n%s\n' "${h}Tools installed${z}"
+  printf '  %s\n' "${d}rg fd bat fzf jq tree htop btop ncdu duf mc${z}"
+  printf '  %s\n' "${d}nmap ncat tmux neovim emacs jed zoxide tldr fastfetch sdk${z}"
+
+  printf '\n%s\n' "${d}Add your own machine-only tweaks in ~/.shell.local${z}"
+}

@@ -72,6 +72,12 @@ Options:
 It is safe to re-run; the include block is added only once and backups are
 timestamped.
 
+## Cheat-sheet
+
+Once installed, run **`dothelp`** in any bash or zsh session to print a grouped
+summary of the aliases, functions, fzf helpers, and tools this setup adds —
+handy when you forget what's available.
+
 ## Customizing
 
 - **Add a CLI tool to both platforms:** add it to `packages/apt.txt` *and*
@@ -86,12 +92,15 @@ timestamped.
 A few tools have different names per platform; the shared aliases paper over
 the binary-name differences:
 
-| Tool | Homebrew | apt        | Binary on Debian | Alias              |
-|------|----------|------------|------------------|--------------------|
-| fd   | `fd`     | `fd-find`  | `fdfind`         | `fd` → `fdfind`    |
-| bat  | `bat`    | `bat`      | `batcat`         | `bat` → `batcat`   |
-| ls+  | `eza`    | (fallback) | —                | falls back to `ls` |
+| Tool | Homebrew             | apt       | Binary on Debian | Alias            |
+|------|----------------------|-----------|------------------|------------------|
+| fd   | `fd`                 | `fd-find` | `fdfind`         | `fd` → `fdfind`  |
+| bat  | `bat`                | `bat`     | `batcat`         | `bat` → `batcat` |
+| mc   | `midnight-commander` | `mc`      | `mc`             | —                |
+| ncat | (bundled with `nmap`)| `ncat`    | `ncat`           | —                |
 
-`eza` isn't packaged on all Debian releases, so it's intentionally left out of
-`apt.txt`; the `ls`/`ll`/`la` aliases fall back to coloured `ls` when `eza`
-isn't present.
+`eza` is listed in both package files, but it's only packaged by apt on Debian
+13+/Ubuntu 24.04. On older releases the apt install step warns and skips it, and
+the `ls`/`ll`/`la` aliases fall back to coloured `ls` when `eza` isn't present.
+Likewise `btop` and `fastfetch` need a recent Debian; they'll skip gracefully on
+older ones (the installer installs apt packages one at a time for this reason).
