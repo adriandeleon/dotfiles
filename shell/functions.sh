@@ -80,7 +80,7 @@ dothelp() {
 
   # Pad the (plain) key to a fixed width, then wrap with colour *outside* the
   # field so the escape bytes don't throw off column alignment.
-  row() { printf '  %s%-18s%s %s\n' "$k" "$1" "$z" "$2"; }
+  row() { printf '  %s%-19s%s %s\n' "$k" "$1" "$z" "$2"; }
 
   printf '%s\n' "${h}dotfiles — shell cheat-sheet${z} ${d}(run 'dothelp' anytime)${z}"
   printf '%s\n\n' "${d}Oh My Bash/Zsh + agnoster · shared config in \$DOTFILES (${DOTFILES})${z}"
@@ -92,8 +92,12 @@ dothelp() {
   row "vi vim"           "→ nvim"
   row "ovim"             "→ the original /usr/bin/vim"
   row "ec"               "→ emacsclient"
-  row "edi edis ediz"    "editora: normal / simple-ui / zen"
-  row "edif edifs edifz" "editora + fzf file picker"
+  row "edi edis ediz"    "editora window: normal / simple-ui / zen"
+
+  printf '\n%s\n' "${h}editora + fzf  (function, and its alias)${z}"
+  row "editoraf  (edif)"  "pick a file with fzf, open in editora"
+  row "editorafs (edifs)" "...in editora's simple UI"
+  row "editorafz (edifz)" "...in editora's zen mode"
 
   printf '\n%s\n' "${h}Git${z}"
   row "g gs gd ga gc"  "git / status / diff / add / commit"
