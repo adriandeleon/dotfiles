@@ -181,18 +181,22 @@ BLOCK_END="# <<< dotfiles (managed by install.sh) <<<"
 
 include_config() {
   # include_config <source-in-repo> <target-rc>
+  # Records what happened in CFG_RC / CFG_BACKUP / CFG_STATUS for the summary.
   src="$1"; dst="$2"
+  CFG_RC="$dst"; CFG_BACKUP=""; CFG_STATUS="appended"
 
   [ -e "$dst" ] || { touch "$dst"; info "Created $dst"; }
 
   if grep -qF "$BLOCK_BEGIN" "$dst" 2>/dev/null; then
     info "Already configured: $dst"
+    CFG_STATUS="already"
     return
   fi
 
   # Back up the original (a copy — the file stays in place) before appending.
   backup="$dst.backup.$(date +%Y%m%d%H%M%S)"
   cp "$dst" "$backup"
+  CFG_BACKUP="$backup"
   info "Backed up $dst -> $backup"
 
   {
@@ -214,7 +218,24 @@ if [ "$DO_LINK" -eq 1 ]; then
     *)      include_config "$DOTFILES_DIR/bash/bashrc" "$HOME/.bashrc" ;;
   esac
 
-  info "Done. Restart your shell or run: exec \"\$SHELL\" -l"
+  # --- Summary of what changed ---
+  case "$OS" in
+    macos) companion="" ;;
+    *)     companion=" (and the ~/.bash_aliases it sources)" ;;
+  esac
+  printf '\n'
+  info "Setup complete. What changed in your shell config:"
+  if [ "$CFG_STATUS" = "already" ]; then
+    printf '  • %s already had the dotfiles include block — no change.\n' "$CFG_RC"
+  else
+    printf '  • Appended a marked include block to %s\n' "$CFG_RC"
+    printf '    that sources aliases, functions, exports and the agnoster theme\n'
+    printf '    from this repo (%s).\n' "$DOTFILES_DIR"
+    [ -n "$CFG_BACKUP" ] && printf '  • Backed up the previous %s to %s\n' "$CFG_RC" "$CFG_BACKUP"
+  fi
+  printf '  • Only that block was added; the rest of %s%s is preserved.\n' "$CFG_RC" "$companion"
+  printf '\n'
+  warn "Reload your shell to see the changes:  exec \"\$SHELL\" -l   (or open a new terminal)"
 else
   info "Skipping shell configuration (--packages)."
 fi
