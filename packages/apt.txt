@@ -15,7 +15,15 @@ bat              # cat with syntax highlighting (binary: batcat)
 fzf              # fuzzy finder
 jq               # JSON processor
 tree
-htop
+eza              # modern ls (Debian 13+/Ubuntu 24.04; skipped on older apt)
+htop             # process viewer
+btop             # resource monitor (richer htop alternative)
+ncdu             # disk usage explorer (TUI)
+duf              # disk usage / mounts (df alternative)
+mc               # Midnight Commander file manager
+fastfetch        # system info (neofetch successor; Debian 13+)
+nmap             # network scanner
+ncat             # netcat reimplementation (standalone package on Debian)
 tmux
 neovim
 emacs            # provides emacsclient (the `ec` alias)
