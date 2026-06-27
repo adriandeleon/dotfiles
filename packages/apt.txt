@@ -24,6 +24,7 @@ tldr             # simplified man pages
 p7zip-full       # 7z archives
 zip              # zip/unzip — also required by SDKMAN
 unzip
+fontconfig       # fc-cache — needed to register the Nerd Font
 less
 bash-completion
 ca-certificates

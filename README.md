@@ -49,14 +49,17 @@ The installer:
 4. Clones [Oh My Bash](https://github.com/ohmybash/oh-my-bash) and
    [Oh My Zsh](https://github.com/ohmyzsh/ohmyzsh) into `~/.oh-my-bash` and
    `~/.oh-my-zsh` (the **agnoster** theme is enabled for both).
-5. **Adds the config to your existing rc files without replacing them.** It
+5. Installs the **JetBrains Mono Nerd Font** so the agnoster glyphs render: a
+   Homebrew cask on macOS, or the Nerd Fonts release archive into
+   `~/.local/share/fonts` on Debian (then refreshes the font cache).
+6. **Adds the config to your existing rc files without replacing them.** It
    backs up `~/.bashrc` / `~/.zshrc` (timestamped copy) and appends a small
    managed include block that sources this repo's `bash/bashrc` / `zsh/zshrc`.
    Your original settings stay in place above the block.
 
 > **Font note:** the agnoster theme uses Powerline glyphs (arrows, branch
-> symbol). Use a **Powerline-patched or Nerd Font** in your terminal, otherwise
-> the prompt shows `?`/box characters.
+> symbol). The installer puts JetBrains Mono Nerd Font on the machine, but you
+> still need to **select it as your terminal's font** for the glyphs to show.
 
 Options:
 

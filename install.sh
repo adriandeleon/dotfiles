@@ -2,8 +2,8 @@
 # install.sh — bootstrap dotfiles on macOS (zsh/brew) or Debian (bash/apt).
 #
 #   1. Detects the OS.
-#   2. Installs the CLI packages listed in packages/{brew,apt}.txt, plus SDKMAN
-#      and the Oh My Bash / Oh My Zsh frameworks.
+#   2. Installs the CLI packages listed in packages/{brew,apt}.txt, plus SDKMAN,
+#      the Oh My Bash / Oh My Zsh frameworks, and the JetBrains Mono Nerd Font.
 #   3. Adds the shell config to your existing ~/.bashrc and ~/.zshrc by backing
 #      them up and appending an include block (your files are NOT replaced).
 #
@@ -109,6 +109,50 @@ install_shell_frameworks() {
   clone_repo "https://github.com/ohmyzsh/ohmyzsh.git"     "$HOME/.oh-my-zsh"  "Oh My Zsh"
 }
 
+# --- JetBrains Mono Nerd Font ------------------------------------------------
+# The agnoster theme needs a Nerd/Powerline font for its glyphs. macOS uses a
+# Homebrew cask; Debian downloads the font archive from the Nerd Fonts release.
+NERD_FONT_VERSION="v3.2.1"
+
+install_font_macos() {
+  info "Installing JetBrains Mono Nerd Font (cask)..."
+  brew install --cask font-jetbrains-mono-nerd-font \
+    || warn "Font cask install failed; skipping."
+}
+
+install_font_debian() {
+  dest="$HOME/.local/share/fonts/JetBrainsMonoNerdFont"
+  if [ -d "$dest" ]; then
+    info "JetBrains Mono Nerd Font already installed."
+    return
+  fi
+  if ! command -v fc-cache >/dev/null 2>&1; then
+    warn "fontconfig (fc-cache) not found; skipping font install."
+    return
+  fi
+  info "Installing JetBrains Mono Nerd Font ($NERD_FONT_VERSION)..."
+  url="https://github.com/ryanoasis/nerd-fonts/releases/download/$NERD_FONT_VERSION/JetBrainsMono.zip"
+  tmp="$(mktemp -d)"
+  if curl -fsSL -o "$tmp/JetBrainsMono.zip" "$url" \
+      && mkdir -p "$dest" \
+      && unzip -oq "$tmp/JetBrainsMono.zip" -d "$dest"; then
+    fc-cache -f "$HOME/.local/share/fonts" >/dev/null 2>&1
+    info "Font installed to $dest"
+  else
+    warn "Font download/extract failed; skipping."
+    rm -rf "$dest"
+  fi
+  rm -rf "$tmp"
+}
+
+install_font() {
+  case "$OS" in
+    macos)  install_font_macos ;;
+    debian) install_font_debian ;;
+    *) warn "No font installer for OS '$OS'; skipping font." ;;
+  esac
+}
+
 if [ "$DO_PACKAGES" -eq 1 ]; then
   case "$OS" in
     macos)  install_macos_packages ;;
@@ -117,6 +161,7 @@ if [ "$DO_PACKAGES" -eq 1 ]; then
   esac
   install_sdkman
   install_shell_frameworks
+  install_font
 else
   info "Skipping package installation (--link)."
 fi
