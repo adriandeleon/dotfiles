@@ -25,7 +25,7 @@ framework + agnoster theme). The installer **appends** them to your existing
 ├── shell/                # shared, POSIX-compatible config
 │   ├── common.sh         #   entry point sourced by both shells
 │   ├── exports.sh        #   environment variables (EDITOR, PATH, history…)
-│   ├── aliases.sh        #   aliases (ls/eza, git, navigation…)
+│   ├── aliases.sh        #   aliases — linked to ~/.bash_aliases / ~/.zsh_aliases
 │   └── functions.sh      #   functions (mkcd, extract, fzf helpers…)
 ├── bash/
 │   └── bashrc            # Oh My Bash (agnoster) + sources shell/common.sh
@@ -60,6 +60,10 @@ The installer:
    up the file (timestamped copy) and appends a small managed include block that
    sources this repo's `bash/bashrc` / `zsh/zshrc`. Your original settings stay
    in place above the block.
+7. **Links your aliases file to the conventional name** — `~/.bash_aliases` on
+   Debian (sourced natively by the stock `~/.bashrc`) or `~/.zsh_aliases` on
+   macOS — both pointing at `shell/aliases.sh`. Any existing file there is backed
+   up first. Edit your aliases at that path or in the repo; it's the same file.
 
 > **Font note:** the agnoster theme uses Powerline glyphs (arrows, branch
 > symbol). The installer puts JetBrains Mono Nerd Font on the machine, but you
@@ -86,8 +90,10 @@ handy when you forget what's available.
 
 - **Add a CLI tool to both platforms:** add it to `packages/apt.txt` *and*
   `packages/brew.txt` (mind the name differences — see below).
-- **Add an alias/function/export:** edit the relevant file in `shell/`. It
-  applies to both shells automatically.
+- **Add an alias:** edit `shell/aliases.sh` (a.k.a. `~/.bash_aliases` /
+  `~/.zsh_aliases` — it's symlinked). Applies to both shells.
+- **Add a function or export:** edit `shell/functions.sh` / `shell/exports.sh`.
+  Applies to both shells automatically.
 - **Machine-specific or secret settings:** put them in `~/.shell.local`. It's
   sourced at the end of `shell/common.sh` and is not tracked by git.
 

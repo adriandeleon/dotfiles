@@ -208,6 +208,33 @@ include_config() {
   info "Appended dotfiles include to $dst"
 }
 
+# --- Aliases file ------------------------------------------------------------
+# Expose shell/aliases.sh at the conventional per-shell filename so your
+# aliases live in their own editable file: ~/.bash_aliases (sourced natively by
+# Debian's stock ~/.bashrc) or ~/.zsh_aliases (sourced by shell/common.sh).
+# Records ALIAS_LINK / ALIAS_BACKUP / ALIAS_STATUS for the summary.
+link_aliases() {
+  src="$DOTFILES_DIR/shell/aliases.sh"
+  case "$OS" in
+    macos) dst="$HOME/.zsh_aliases" ;;
+    *)     dst="$HOME/.bash_aliases" ;;
+  esac
+  ALIAS_LINK="$dst"; ALIAS_BACKUP=""; ALIAS_STATUS="linked"
+
+  if [ -L "$dst" ] && [ "$(readlink "$dst")" = "$src" ]; then
+    info "Aliases already linked: $dst"
+    ALIAS_STATUS="already"
+    return
+  fi
+  if [ -e "$dst" ] || [ -L "$dst" ]; then
+    ALIAS_BACKUP="$dst.backup.$(date +%Y%m%d%H%M%S)"
+    mv "$dst" "$ALIAS_BACKUP"
+    info "Backed up existing $dst -> $ALIAS_BACKUP"
+  fi
+  ln -s "$src" "$dst"
+  info "Linked $dst -> $src"
+}
+
 # --- Wire up the shell configuration -----------------------------------------
 if [ "$DO_LINK" -eq 1 ]; then
   info "Configuring shell startup files (existing files are backed up, not replaced)..."
@@ -218,22 +245,27 @@ if [ "$DO_LINK" -eq 1 ]; then
     *)      include_config "$DOTFILES_DIR/bash/bashrc" "$HOME/.bashrc" ;;
   esac
 
+  # Put the aliases in their own conventional file.
+  link_aliases
+
   # --- Summary of what changed ---
-  case "$OS" in
-    macos) companion="" ;;
-    *)     companion=" (and the ~/.bash_aliases it sources)" ;;
-  esac
   printf '\n'
   info "Setup complete. What changed in your shell config:"
   if [ "$CFG_STATUS" = "already" ]; then
     printf '  • %s already had the dotfiles include block — no change.\n' "$CFG_RC"
   else
     printf '  • Appended a marked include block to %s\n' "$CFG_RC"
-    printf '    that sources aliases, functions, exports and the agnoster theme\n'
-    printf '    from this repo (%s).\n' "$DOTFILES_DIR"
+    printf '    that sources functions, exports and the agnoster theme from this\n'
+    printf '    repo (%s).\n' "$DOTFILES_DIR"
     [ -n "$CFG_BACKUP" ] && printf '  • Backed up the previous %s to %s\n' "$CFG_RC" "$CFG_BACKUP"
   fi
-  printf '  • Only that block was added; the rest of %s%s is preserved.\n' "$CFG_RC" "$companion"
+  if [ "$ALIAS_STATUS" = "already" ]; then
+    printf '  • Your aliases file %s already links to the repo — no change.\n' "$ALIAS_LINK"
+  else
+    printf '  • Linked your aliases file %s -> %s\n' "$ALIAS_LINK" "$DOTFILES_DIR/shell/aliases.sh"
+    [ -n "$ALIAS_BACKUP" ] && printf '  • Backed up your previous %s to %s\n' "$ALIAS_LINK" "$ALIAS_BACKUP"
+  fi
+  printf '  • The rest of %s is preserved (only the marked block was added).\n' "$CFG_RC"
   printf '\n'
   warn "Reload your shell to see the changes:  exec \"\$SHELL\" -l   (or open a new terminal)"
 else

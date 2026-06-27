@@ -7,10 +7,18 @@
 : "${DOTFILES:=$HOME/.dotfiles}"
 DOTFILES_SHELL="$DOTFILES/shell"
 
-for part in exports aliases functions; do
+for part in exports functions; do
   [ -r "$DOTFILES_SHELL/$part.sh" ] && . "$DOTFILES_SHELL/$part.sh"
 done
 unset part
+
+# Aliases live in their own file, linked to the conventional name by
+# install.sh: ~/.bash_aliases (bash) and ~/.zsh_aliases (zsh), both pointing at
+# shell/aliases.sh. Bash's stock ~/.bashrc already sources ~/.bash_aliases, so
+# we only need to load the zsh equivalent here (zsh has no such convention).
+if [ -n "${ZSH_VERSION:-}" ]; then
+  [ -r "$HOME/.zsh_aliases" ] && . "$HOME/.zsh_aliases"
+fi
 
 # --- Shared interactive tooling ---------------------------------------------
 # Detect current shell name for tools that need shell-specific init.
