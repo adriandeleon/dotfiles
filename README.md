@@ -21,7 +21,9 @@ framework + agnoster theme). The installer **appends** them to your existing
 ├── install.sh            # bootstrap: install packages + configure shells
 ├── packages/
 │   ├── apt.txt           # CLI tools for Debian (apt)
-│   └── brew.txt          # the same CLI tools for macOS (Homebrew)
+│   ├── brew.txt          # the same CLI tools for macOS (Homebrew)
+│   ├── apt-minimal.txt   # lean subset for `install.sh --minimal`
+│   └── brew-minimal.txt  # …and its Homebrew counterpart
 ├── shell/                # shared, POSIX-compatible config
 │   ├── common.sh         #   entry point sourced by both shells
 │   ├── exports.sh        #   environment variables (EDITOR, PATH, history…)
@@ -72,10 +74,17 @@ The installer:
 Options:
 
 ```sh
+./install.sh --minimal    # lean subset of packages + shell config only
 ./install.sh --link       # only configure the rc files, skip packages
 ./install.sh --packages   # only install packages, skip shell config
 ./install.sh --help
 ```
+
+`--minimal` installs just the core CLI tools from `packages/{apt,brew}-minimal.txt`
+(git, curl, fzf, ripgrep, bat, eza, htop, btop, duf, nmap, ncat, tmux, jed, zip,
+unzip, bash-completion) and still wires up your aliases/functions — but **skips**
+SDKMAN, the Oh My Bash/Zsh framework, and the Nerd Font. Good for servers or
+throwaway boxes where you just want the essentials.
 
 It is safe to re-run; the include block is added only once and backups are
 timestamped.

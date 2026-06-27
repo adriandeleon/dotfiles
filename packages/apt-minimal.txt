@@ -1,0 +1,19 @@
+# Minimal Debian/Ubuntu apt package set (install.sh --minimal).
+# A lean subset of packages/apt.txt — core CLI tools only.
+
+git
+curl
+fzf              # fuzzy finder
+ripgrep          # rg — fast grep
+bat              # cat with syntax highlighting (binary: batcat)
+eza              # modern ls (Debian 13+/Ubuntu 24.04)
+htop             # process viewer
+btop             # resource monitor
+duf              # disk usage / mounts (df alternative)
+nmap             # network scanner
+ncat             # netcat reimplementation
+tmux
+jed              # lightweight text editor
+zip
+unzip
+bash-completion
