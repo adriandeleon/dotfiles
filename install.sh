@@ -13,6 +13,8 @@
 #
 # Usage:
 #   ./install.sh            # install packages + configure shell
+#   ./install.sh --minimal  # lean subset (packages/*-minimal.txt) + shell config;
+#                           # skips SDKMAN, the shell framework, and the font
 #   ./install.sh --link     # only configure the shell rc files, skip packages
 #   ./install.sh --packages # only install packages, skip shell config
 
@@ -24,7 +26,9 @@ export DOTFILES="$DOTFILES_DIR"
 
 DO_PACKAGES=1
 DO_LINK=1
+MINIMAL=0
 case "${1:-}" in
+  --minimal)  MINIMAL=1 ;;
   --link)     DO_PACKAGES=0 ;;
   --packages) DO_LINK=0 ;;
   --help|-h)  grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -45,6 +49,16 @@ case "$(uname -s)" in
 esac
 info "Detected OS: $OS"
 
+# --- Choose the package set (full vs --minimal) ------------------------------
+if [ "$MINIMAL" -eq 1 ]; then
+  info "Minimal install: core packages only, skipping SDKMAN / framework / font."
+  APT_LIST="$DOTFILES_DIR/packages/apt-minimal.txt"
+  BREW_LIST="$DOTFILES_DIR/packages/brew-minimal.txt"
+else
+  APT_LIST="$DOTFILES_DIR/packages/apt.txt"
+  BREW_LIST="$DOTFILES_DIR/packages/brew.txt"
+fi
+
 # --- Read a package list, stripping comments and blank lines -----------------
 read_packages() {
   # $1 = path to package list. Prints one package name per line.
@@ -61,7 +75,7 @@ install_macos_packages() {
   info "Installing Homebrew packages..."
   # `brew install` with the full list is fine; brew skips already-installed.
   # shellcheck disable=SC2046
-  brew install $(read_packages "$DOTFILES_DIR/packages/brew.txt") || \
+  brew install $(read_packages "$BREW_LIST") || \
     warn "Some brew packages failed; continuing."
 }
 
@@ -74,10 +88,10 @@ install_debian_packages() {
   info "Installing apt packages..."
   # A single apt install for the whole list. If a package is unavailable on
   # this release (e.g. eza/btop/fastfetch on older Debian) apt installs none of
-  # them — drop it from packages/apt.txt or upgrade the release.
+  # them — drop it from the package list or upgrade the release.
   # shellcheck disable=SC2046
   sudo apt install -y --no-install-recommends \
-    $(read_packages "$DOTFILES_DIR/packages/apt.txt") \
+    $(read_packages "$APT_LIST") \
     || warn "Some apt packages failed to install; continuing."
 }
 
@@ -164,9 +178,13 @@ if [ "$DO_PACKAGES" -eq 1 ]; then
     debian) install_debian_packages ;;
     *) warn "No package installer for OS '$OS'; skipping packages." ;;
   esac
-  install_sdkman
-  install_shell_frameworks
-  install_font
+  # The full install adds SDKMAN, the shell framework, and the Nerd Font.
+  # --minimal skips all three.
+  if [ "$MINIMAL" -eq 0 ]; then
+    install_sdkman
+    install_shell_frameworks
+    install_font
+  fi
 else
   info "Skipping package installation (--link)."
 fi
