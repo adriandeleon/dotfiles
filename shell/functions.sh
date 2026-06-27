@@ -1,5 +1,6 @@
-# shell/functions.sh — functions shared by bash and zsh
-# POSIX-compatible: must work in both shells.
+# shell/functions.sh — functions shared by bash and zsh.
+# Written for bash/zsh (the fzf helpers below use hyphenated names, which are a
+# bash/zsh extension rather than strict POSIX sh).
 
 # Make a directory and cd into it.
 mkcd() {
@@ -34,4 +35,33 @@ up() {
     i=$((i + 1))
   done
   cd "$path" || return 1
+}
+
+# --- fzf helpers -------------------------------------------------------------
+# Aliases are NOT expanded inside function bodies, so resolve the real binary
+# names here (Debian ships fdfind/batcat; macOS/Homebrew ship fd/bat).
+command -v fdfind >/dev/null 2>&1 && _FD=fdfind || _FD=fd
+command -v batcat >/dev/null 2>&1 && _BAT=batcat || _BAT=bat
+
+# cd into a directory picked with fzf.
+cdf() {
+  dir="$("$_FD" -t d | fzf)" && [ -n "$dir" ] && cd "$dir" || return
+}
+
+# Open an fzf-picked file in the editor ($EDITOR is nvim; see exports.sh).
+vimf() {
+  file="$(fzf)" && [ -n "$file" ] && "${EDITOR:-nvim}" "$file"
+}
+
+# editora + fzf: pick a file, open it in the various editora modes.
+editoraf()  { file="$(fzf)" && [ -n "$file" ] && editora "$file" --single-window; }
+editorafs() { file="$(fzf)" && [ -n "$file" ] && editora "$file" --simple --single-window; }
+editorafz() { file="$(fzf)" && [ -n "$file" ] && editora "$file" --single-window --zen; }
+
+# Find a file with a bat-powered preview pane.
+fd-fp() {
+  "$_FD" -t f | fzf --preview "$_BAT --style=numbers --color=always {}"
+}
+find-fp() {
+  find . -type f | fzf --preview "$_BAT --style=numbers --color=always {}"
 }
