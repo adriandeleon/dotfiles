@@ -1,0 +1,33 @@
+# ~/.bashrc — Debian / bash configuration.
+# Sourced from your existing ~/.bashrc by an include block that install.sh
+# appends (your original file is backed up, never replaced).
+
+# If not running interactively, don't do anything.
+case $- in
+  *i*) ;;
+  *) return ;;
+esac
+
+# Location of the dotfiles checkout (override in ~/.shell.local if needed).
+export DOTFILES="${DOTFILES:-$HOME/.dotfiles}"
+
+# --- Bash-specific options ---------------------------------------------------
+shopt -s histappend       # append to history, don't overwrite
+shopt -s checkwinsize     # update LINES/COLUMNS after each command
+shopt -s globstar 2>/dev/null  # ** recursive globbing
+HISTCONTROL=ignoreboth    # no duplicate lines or lines starting with space
+
+# --- Oh My Bash --------------------------------------------------------------
+# Framework lives in ~/.oh-my-bash (cloned by install.sh). It owns the prompt
+# (agnoster theme) and completion. Source it *before* the shared config so our
+# aliases/exports below take precedence over the framework's defaults.
+export OSH="$HOME/.oh-my-bash"
+OSH_THEME="agnoster"                 # needs a Powerline/Nerd font to render
+DISABLE_AUTO_UPDATE="true"
+completions=(git ssh)
+aliases=(general)
+plugins=(git)
+[ -r "$OSH/oh-my-bash.sh" ] && source "$OSH/oh-my-bash.sh"
+
+# --- Shared configuration (aliases, exports, functions, tooling) -------------
+[ -r "$DOTFILES/shell/common.sh" ] && . "$DOTFILES/shell/common.sh"

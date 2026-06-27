@@ -1,0 +1,31 @@
+# Debian/Ubuntu apt packages. One package per line; '#' starts a comment.
+# Keep this in sync with packages/brew.txt — same CLI tools, apt names.
+#
+# Note: Debian names a few binaries differently from Homebrew:
+#   fd-find installs `fdfind`, bat installs `batcat`.
+# The shared aliases (shell/aliases.sh) map these to `fd` / `bat`.
+
+git
+curl
+wget
+build-essential  # compiler toolchain (rough analogue of Xcode CLT)
+ripgrep          # rg — fast grep
+fd-find          # fd — fast find (binary: fdfind)
+bat              # cat with syntax highlighting (binary: batcat)
+fzf              # fuzzy finder
+jq               # JSON processor
+tree
+htop
+tmux
+neovim
+emacs            # provides emacsclient (the `ec` alias)
+jed              # lightweight text editor
+zoxide           # smarter cd
+tldr             # simplified man pages
+p7zip-full       # 7z archives
+zip              # zip/unzip — also required by SDKMAN
+unzip
+fontconfig       # fc-cache — needed to register the Nerd Font
+less
+bash-completion
+ca-certificates

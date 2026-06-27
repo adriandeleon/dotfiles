@@ -1,0 +1,19 @@
+# ~/.zshrc — macOS / zsh configuration.
+# Sourced from your existing ~/.zshrc by an include block that install.sh
+# appends (your original file is backed up, never replaced).
+
+# Location of the dotfiles checkout (override in ~/.shell.local if needed).
+export DOTFILES="${DOTFILES:-$HOME/.dotfiles}"
+
+# --- Oh My Zsh ---------------------------------------------------------------
+# Framework lives in ~/.oh-my-zsh (cloned by install.sh). It owns the prompt
+# (agnoster theme), completion, and history. Source it *before* the shared
+# config so our aliases/exports below take precedence over the defaults.
+export ZSH="$HOME/.oh-my-zsh"
+ZSH_THEME="agnoster"                 # needs a Powerline/Nerd font to render
+DISABLE_AUTO_UPDATE="true"
+plugins=(git)
+[ -r "$ZSH/oh-my-zsh.sh" ] && source "$ZSH/oh-my-zsh.sh"
+
+# --- Shared configuration (aliases, exports, functions, tooling) -------------
+[ -r "$DOTFILES/shell/common.sh" ] && . "$DOTFILES/shell/common.sh"
