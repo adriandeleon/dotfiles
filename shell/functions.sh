@@ -37,6 +37,38 @@ up() {
   cd "$path" || return 1
 }
 
+# Git change branch with fzf support. 
+# -This version:
+# -sorts by most recently updated branches
+# -previews the commit graph
+# -lists local and remote branches
+# -automatically creates a tracking branch if you pick a remote-only branch
+gb() {
+    local branch
+
+    branch=$(
+        git for-each-ref \
+            --sort=-committerdate \
+            --format='%(refname:short)' \
+            refs/heads refs/remotes/origin |
+        sed 's#^origin/##' |
+        grep -v '^HEAD$' |
+        sort -u |
+        fzf \
+            --height=50% \
+            --reverse \
+            --prompt='branch> ' \
+            --preview='git log --graph --decorate --oneline --color=always -n 20 {}'
+    ) || return
+
+    if git show-ref --verify --quiet "refs/heads/$branch"; then
+        git switch "$branch"
+    else
+        git switch --track "origin/$branch"
+    fi
+}
+
+
 # --- fzf helpers -------------------------------------------------------------
 # Aliases are NOT expanded inside function bodies, so resolve the real binary
 # names here (Debian ships fdfind/batcat; macOS/Homebrew ship fd/bat).
