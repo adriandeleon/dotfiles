@@ -32,7 +32,7 @@ alias vim='nvim'
 alias ovim='/usr/bin/vim'          # the original vim, bypassing the nvim alias
 alias ec='emacsclient'
 
-# editora - personal editor wrapper and its variants.
+# editora: personal editor wrapper and its variants.
 alias edi='editora --single-window'
 alias edis='editora --simple-ui --single-window'
 alias ediz='editora --zen --single-window'
