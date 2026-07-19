@@ -1,4 +1,4 @@
-# shell/functions.sh — functions shared by bash and zsh.
+# shell/functions.sh - functions shared by bash and zsh.
 # Written for bash/zsh (the fzf helpers below use hyphenated names, which are a
 # bash/zsh extension rather than strict POSIX sh).
 
@@ -37,12 +37,13 @@ up() {
   cd "$path" || return 1
 }
 
-# Git change branch with fzf support. 
+# Git change branch with fzf support.
 # -This version:
 # -sorts by most recently updated branches
 # -previews the commit graph
 # -lists local and remote branches
 # -automatically creates a tracking branch if you pick a remote-only branch
+unalias gb 2>/dev/null
 gb() {
     local branch
 
@@ -89,7 +90,7 @@ vimf() {
 editoraf()  { file="$(fzf)" && [ -n "$file" ] && editora "$file" --single-window; }
 editorafs() { file="$(fzf)" && [ -n "$file" ] && editora "$file" --simple --single-window; }
 editorafz() { file="$(fzf)" && [ -n "$file" ] && editora "$file" --single-window --zen; }
-
+editorafe() { file="$(fzf)" && [ -n "$file" ] && editora "$file" --single-window --expert; }
 # Find a file with a bat-powered preview pane.
 fd-fp() {
   "$_FD" -t f | fzf --preview "$_BAT --style=numbers --color=always {}"
@@ -99,7 +100,7 @@ find-fp() {
 }
 
 # --- Help --------------------------------------------------------------------
-# dothelp — a cheat-sheet of what this dotfiles setup adds to your shell.
+# dothelp - a cheat-sheet of what this dotfiles setup adds to your shell.
 # Run `dothelp` (works the same in bash and zsh) to print it any time.
 dothelp() {
   # Colours, but only when writing to a terminal.

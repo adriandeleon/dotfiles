@@ -1,4 +1,4 @@
-# ~/.bashrc — Debian / bash configuration.
+# ~/.bashrc - Debian / bash configuration.
 # Sourced from your existing ~/.bashrc by an include block that install.sh
 # appends (your original file is backed up, never replaced).
 
@@ -23,7 +23,7 @@ HISTCONTROL=ignoreboth    # no duplicate lines or lines starting with space
 #
 # Your aliases live in ~/.bash_aliases (a symlink to shell/aliases.sh, set up
 # by install.sh), which Debian's stock ~/.bashrc sources *before* this block.
-# So we deliberately load NO alias/plugin modules here — otherwise Oh My Bash
+# So we deliberately load NO alias/plugin modules here - otherwise Oh My Bash
 # would redefine ll/la/git aliases and clobber yours. Completion only.
 export OSH="$HOME/.oh-my-bash"
 OSH_THEME="agnoster"                 # needs a Powerline/Nerd font to render

@@ -1,4 +1,4 @@
-# ~/.zshrc — macOS / zsh configuration.
+# ~/.zshrc - macOS / zsh configuration.
 # Sourced from your existing ~/.zshrc by an include block that install.sh
 # appends (your original file is backed up, never replaced).
 

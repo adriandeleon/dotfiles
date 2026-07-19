@@ -1,4 +1,4 @@
-# shell/exports.sh — environment variables shared by bash and zsh
+# shell/exports.sh - environment variables shared by bash and zsh
 # POSIX-compatible: must work in both shells.
 
 # Preferred editor
@@ -24,7 +24,7 @@ export HISTSIZE=100000
 export HISTFILESIZE=200000
 export SAVEHIST=100000
 
-# Homebrew (macOS) — set up PATH/vars if present
+# Homebrew (macOS) - set up PATH/vars if present
 if [ -x /opt/homebrew/bin/brew ]; then
   eval "$(/opt/homebrew/bin/brew shellenv)"
 elif [ -x /usr/local/bin/brew ]; then

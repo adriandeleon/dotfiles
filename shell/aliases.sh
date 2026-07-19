@@ -1,4 +1,4 @@
-# shell/aliases.sh — aliases shared by bash and zsh
+# shell/aliases.sh - aliases shared by bash and zsh
 # POSIX-compatible: must work in both shells.
 
 # --- Listing -----------------------------------------------------------------
@@ -32,13 +32,15 @@ alias vim='nvim'
 alias ovim='/usr/bin/vim'          # the original vim, bypassing the nvim alias
 alias ec='emacsclient'
 
-# editora — personal editor wrapper and its variants.
+# editora - personal editor wrapper and its variants.
 alias edi='editora --single-window'
 alias edis='editora --simple-ui --single-window'
 alias ediz='editora --zen --single-window'
+alias edie='editora --expert --single-window'
 alias edif='editoraf'
 alias edifs='editorafs'
 alias edifz='editorafz'
+alias edife='editorafe'
 
 # --- fzf helpers -------------------------------------------------------------
 alias fh='history | fzf'           # fuzzy-search shell history
