@@ -29,7 +29,6 @@ neovim
 emacs            # provides emacsclient (the `ec` alias)
 jed              # lightweight text editor
 zoxide           # smarter cd
-tldr             # simplified man pages
 p7zip-full       # 7z archives
 zip              # zip/unzip — also required by SDKMAN
 unzip
