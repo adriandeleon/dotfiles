@@ -35,7 +35,7 @@ Tested on **Debian 13 (trixie)** and **macOS**. A leaner subset is available via
 
 ## Layout
 
-```
+```text
 .
 ├── install.sh            # bootstrap: install packages + configure shells
 ├── packages/
