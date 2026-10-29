@@ -1,5 +1,7 @@
 # shell/aliases.sh - aliases shared by bash and zsh
-# POSIX-compatible: must work in both shells.
+# POSIX-compatible: must work in both shells. shell/common.sh loads this after
+# the functions and tool integrations, so these aliases never leak into their
+# definitions.
 
 # --- Listing -----------------------------------------------------------------
 # Prefer eza (with icons) if installed, otherwise fall back to coloured ls.
@@ -11,14 +13,16 @@ if command -v eza >/dev/null 2>&1; then
   alias lt='eza --icons --tree --level=2'
 else
   # macOS ls uses -G for colour; GNU ls uses --color=auto. `command` makes the
-  # probe use the real ls binary, never an alias.
-  if command ls --color=auto >/dev/null 2>&1; then
+  # probe use the real ls binary, never an alias; `-d /` keeps it from listing
+  # the current directory (slow in huge or network directories).
+  if command ls --color=auto -d / >/dev/null 2>&1; then
     alias ls='ls --color=auto'
   else
     alias ls='ls -G'
   fi
   alias ll='ls -lah'
   alias la='ls -A'
+  command -v tree >/dev/null 2>&1 && alias lt='tree -L 2'
 fi
 
 # --- Distro binary-name differences -----------------------------------------
@@ -34,7 +38,7 @@ if command -v nvim >/dev/null 2>&1; then
   alias vi='nvim'
   alias vim='nvim'
 fi
-alias ovim='command vim'           # the original vim, bypassing the nvim alias
+# `ovim` (a real Vim, bypassing these aliases) is a function in functions.sh.
 alias ec='emacsclient'
 
 # editora: personal editor wrapper and its variants.
@@ -48,7 +52,7 @@ alias edifz='editorafz'
 alias edife='editorafe'
 
 # --- fzf helpers -------------------------------------------------------------
-alias fh='history | fzf'           # fuzzy-search shell history
+# (`fh`, fuzzy history search, is a function in functions.sh.)
 alias ff='find . -type f | fzf'    # fuzzy-pick a file under the cwd
 alias fdf='fd -t f | fzf'          # same, using fd (faster, respects .gitignore)
 

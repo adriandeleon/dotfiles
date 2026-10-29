@@ -8,8 +8,11 @@
 #   3. Adds the shell config to the native rc file (~/.bashrc on Debian,
 #      ~/.zshrc on macOS) by backing it up and appending an include block (your
 #      file is NOT replaced).
+#   4. Links ~/.bash_aliases / ~/.zsh_aliases to shell/aliases.sh, unless you
+#      already have your own (that one is kept and still loaded).
 #
-# Safe to re-run: the include block is added only once; backups are timestamped.
+# Safe to re-run: the include block is added only once (and updated in place if
+# the checkout moved); backups are timestamped.
 #
 # Usage:
 #   ./install.sh            # install packages + configure shell
@@ -21,10 +24,6 @@
 # Options can be combined, e.g. `--minimal --packages`.
 
 set -euo pipefail
-
-# --- Resolve paths -----------------------------------------------------------
-DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-export DOTFILES="$DOTFILES_DIR"
 
 DO_PACKAGES=1
 DO_LINK=1
@@ -44,15 +43,39 @@ if [ "$DO_PACKAGES" -eq 0 ] && [ "$DO_LINK" -eq 0 ]; then
   exit 1
 fi
 
+# --- Resolve paths -----------------------------------------------------------
+# pwd -P: the physical path, so reaching the checkout through a symlink doesn't
+# make every run think the repo has moved.
+DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+export DOTFILES="$DOTFILES_DIR"
+
+# The path is written into your rc file inside double quotes, so refuse
+# characters that would break out of them (or run code at every shell start).
+case "$DOTFILES_DIR" in
+  *[\"\$\`\\]*)
+    echo "install.sh: the checkout path can't contain \" \$ \` or \\ characters:" >&2
+    echo "  $DOTFILES_DIR" >&2
+    exit 1 ;;
+esac
+
+# Every warning is counted, so the run can't end with a plain "done" when a step
+# actually failed.
+WARNINGS=0
 info()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
-warn()  { printf '\033[1;33m[!]\033[0m %s\n' "$*" >&2; }
+warn()  { printf '\033[1;33m[!]\033[0m %s\n' "$*" >&2; WARNINGS=$((WARNINGS + 1)); }
 
 # --- Detect OS ---------------------------------------------------------------
+# /etc/debian_version covers Debian and its derivatives (Ubuntu, Mint...); a
+# bare `apt` command also exists on unrelated apt-rpm distros.
 OS="unknown"
 case "$(uname -s)" in
   Darwin) OS="macos" ;;
   Linux)
-    if command -v apt >/dev/null 2>&1; then OS="debian"; else OS="linux"; fi
+    if [ -f /etc/debian_version ] && command -v apt-get >/dev/null 2>&1; then
+      OS="debian"
+    else
+      OS="linux"
+    fi
     ;;
 esac
 info "Detected OS: $OS"
@@ -69,38 +92,81 @@ fi
 
 # --- Read a package list, stripping comments and blank lines -----------------
 read_packages() {
-  # $1 = path to package list. Prints one package name per line.
+  # $1 = path to package list. Prints one package name per line (nothing if the
+  # file is missing; callers check for an empty result).
+  [ -r "$1" ] || return 0
   sed -e 's/#.*//' -e 's/[[:space:]]*$//' "$1" | grep -v '^[[:space:]]*$' || true
 }
 
 # --- Install packages --------------------------------------------------------
+# Homebrew may be installed but not on PATH yet (e.g. a fresh terminal on Apple
+# Silicon), so check its standard locations too.
+find_brew() {
+  if command -v brew >/dev/null 2>&1; then command -v brew; return 0; fi
+  for b in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+    if [ -x "$b" ]; then echo "$b"; return 0; fi
+  done
+  return 1
+}
+
 install_macos_packages() {
-  if ! command -v brew >/dev/null 2>&1; then
+  if ! brew_bin="$(find_brew)"; then
     info "Installing Homebrew..."
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    eval "$([ -x /opt/homebrew/bin/brew ] && /opt/homebrew/bin/brew shellenv || /usr/local/bin/brew shellenv)"
+    # Download first: piping a failed download into bash would "succeed".
+    if ! brew_script="$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; then
+      warn "Couldn't download the Homebrew installer; skipping packages."
+      return
+    fi
+    if ! /bin/bash -c "$brew_script"; then
+      warn "Homebrew install failed; skipping packages."
+      return
+    fi
+    if ! brew_bin="$(find_brew)"; then
+      warn "Homebrew installed but brew wasn't found; skipping packages."
+      return
+    fi
+  fi
+  eval "$("$brew_bin" shellenv)"
+
+  pkgs="$(read_packages "$BREW_LIST")"
+  if [ -z "$pkgs" ]; then
+    warn "Package list $BREW_LIST is missing or empty; skipping packages."
+    return
   fi
   info "Installing Homebrew packages..."
   # `brew install` with the full list is fine; brew skips already-installed.
-  # shellcheck disable=SC2046
-  brew install $(read_packages "$BREW_LIST") || \
-    warn "Some brew packages failed; continuing."
+  # shellcheck disable=SC2086  # split the package list into arguments
+  brew install $pkgs || warn "Some brew packages failed; continuing."
 }
 
 install_debian_packages() {
-  info "Updating apt package index (sudo)..."
-  # Don't abort the whole install if `apt update` reports an error — a single
-  # broken third-party repo (bad signature, EOL suite, etc.) shouldn't stop us
-  # from installing packages, since the working repos still refreshed.
+  if [ "$(id -u)" -eq 0 ]; then
+    SUDO=""
+  elif command -v sudo >/dev/null 2>&1; then
+    SUDO="sudo"
+  else
+    warn "Not running as root and sudo isn't installed; skipping apt packages."
+    return
+  fi
+
+  pkgs="$(read_packages "$APT_LIST")"
+  if [ -z "$pkgs" ]; then
+    warn "Package list $APT_LIST is missing or empty; skipping packages."
+    return
+  fi
+
+  info "Updating apt package index${SUDO:+ (sudo)}..."
+  # Don't abort the whole install if `apt-get update` reports an error — a
+  # single broken third-party repo (bad signature, EOL suite, etc.) shouldn't
+  # stop us from installing packages, since the working repos still refreshed.
   # apt-get rather than apt: apt's CLI isn't stable for scripts.
-  sudo apt-get update || warn "apt-get update reported errors (likely an unrelated repo); continuing."
+  $SUDO apt-get update || warn "apt-get update reported errors (likely an unrelated repo); continuing."
   info "Installing apt packages..."
   # A single apt install for the whole list. If a package is unavailable on
   # this release (e.g. eza/btop/fastfetch on older Debian) apt installs none of
   # them — drop it from the package list or upgrade the release.
-  # shellcheck disable=SC2046
-  sudo apt-get install -y --no-install-recommends \
-    $(read_packages "$APT_LIST") \
+  # shellcheck disable=SC2086  # split the package list into arguments
+  $SUDO apt-get install -y --no-install-recommends $pkgs \
     || warn "Some apt packages failed to install; continuing."
 }
 
@@ -170,7 +236,9 @@ install_font_debian() {
       && printf '%s  %s\n' "$NERD_FONT_SHA256" "$tmp/JetBrainsMono.zip" | sha256sum -c --quiet - \
       && mkdir -p "$dest" \
       && unzip -oq "$tmp/JetBrainsMono.zip" -d "$dest"; then
-    fc-cache -f "$HOME/.local/share/fonts" >/dev/null 2>&1
+    # Under set -e a failing fc-cache here would abort the whole install.
+    fc-cache -f "$HOME/.local/share/fonts" >/dev/null 2>&1 \
+      || warn "fc-cache failed; the font may not show up until you log in again."
     info "Font installed to $dest"
   else
     warn "Font download/verify/extract failed; skipping."
@@ -207,9 +275,11 @@ fi
 # --- Include helper ----------------------------------------------------------
 # Rather than replacing your rc files, we back them up and append a small block
 # that sources the matching file from this repo. Re-running is idempotent: the
-# block is added only once (detected by the marker), and your original content
-# is preserved above it. If the repo has moved since, the block is rewritten to
-# point at the new location.
+# block is added only once (detected by the markers), and your original content
+# is preserved around it. If the block's contents are out of date (e.g. the
+# repo has moved), they are rewritten in place, keeping the block where it is.
+# If the markers look damaged (missing, repeated or out of order), the file is
+# left alone and you're asked to fix it by hand.
 BLOCK_BEGIN="# >>> dotfiles (managed by install.sh) >>>"
 BLOCK_END="# <<< dotfiles (managed by install.sh) <<<"
 
@@ -218,62 +288,88 @@ include_config() {
   # Records what happened in CFG_RC / CFG_BACKUP / CFG_STATUS for the summary.
   src="$1"; dst="$2"
   CFG_RC="$dst"; CFG_BACKUP=""; CFG_STATUS="appended"
+  # `if … fi` rather than `[ -r … ] && …`, so a missing file doesn't leave a
+  # failure status as the rc file's last command (agnoster shows it as ✘).
+  block_body="$(printf 'export DOTFILES="%s"\nif [ -r "%s" ]; then . "%s"; fi' \
+    "$DOTFILES_DIR" "$src" "$src")"
 
   [ -e "$dst" ] || { touch "$dst"; info "Created $dst"; }
 
-  if grep -qF "$BLOCK_BEGIN" "$dst" 2>/dev/null; then
-    if grep -qxF "export DOTFILES=\"$DOTFILES_DIR\"" "$dst"; then
+  if grep -qF -e "$BLOCK_BEGIN" -e "$BLOCK_END" "$dst"; then
+    # Exactly one begin marker, followed by exactly one end marker.
+    if ! awk -v b="$BLOCK_BEGIN" -v e="$BLOCK_END" '
+        $0 == b { if (seen) bad = 1; seen = 1; open = 1; next }
+        $0 == e { if (!open) bad = 1; open = 0 }
+        END { exit (bad || open || !seen) }' "$dst"; then
+      warn "The dotfiles block markers in $dst are damaged (missing, repeated or out of order); left it unchanged."
+      warn "Fix or remove the block by hand, then re-run ./install.sh --link."
+      CFG_STATUS="damaged"
+      return
+    fi
+    current="$(awk -v b="$BLOCK_BEGIN" -v e="$BLOCK_END" \
+      '$0 == e { open = 0 } open { print } $0 == b { open = 1 }' "$dst")"
+    if [ "$current" = "$block_body" ]; then
       info "Already configured: $dst"
       CFG_STATUS="already"
       return
     fi
-    # The block points at an old checkout location: replace it below.
     CFG_STATUS="updated"
   fi
 
-  # Back up the original (a copy — the file stays in place) before appending.
+  # Back up the original (a copy — the file stays in place) before changing it.
   backup="$dst.backup.$(date +%Y%m%d%H%M%S)"
   cp "$dst" "$backup"
   CFG_BACKUP="$backup"
   info "Backed up $dst -> $backup"
 
   if [ "$CFG_STATUS" = "updated" ]; then
-    # Rewrite in place (keeps the file's inode/permissions), minus the old block.
-    awk -v b="$BLOCK_BEGIN" -v e="$BLOCK_END" \
-      '$0 == b { skip = 1 } !skip { print } $0 == e { skip = 0 }' "$backup" > "$dst"
+    # Replace just the lines between the markers. Writing into $dst (rather
+    # than moving a new file over it) keeps its inode and permissions.
+    BODY="$block_body" awk -v b="$BLOCK_BEGIN" -v e="$BLOCK_END" '
+      $0 == b { print; print ENVIRON["BODY"]; skip = 1; next }
+      $0 == e { skip = 0 }
+      !skip { print }' "$backup" > "$dst"
+    info "Updated the dotfiles include block in $dst"
+  else
+    printf '\n%s\n%s\n%s\n' "$BLOCK_BEGIN" "$block_body" "$BLOCK_END" >> "$dst"
+    info "Appended dotfiles include to $dst"
   fi
-
-  {
-    printf '\n%s\n' "$BLOCK_BEGIN"
-    printf 'export DOTFILES="%s"\n' "$DOTFILES_DIR"
-    printf '[ -r "%s" ] && . "%s"\n' "$src" "$src"
-    printf '%s\n' "$BLOCK_END"
-  } >> "$dst"
-  info "Appended dotfiles include to $dst"
 }
 
 # --- Aliases file ------------------------------------------------------------
-# Expose shell/aliases.sh at the conventional per-shell filename so your
-# aliases live in their own editable file: ~/.bash_aliases (sourced natively by
-# Debian's stock ~/.bashrc) or ~/.zsh_aliases (sourced by shell/common.sh).
-# Records ALIAS_LINK / ALIAS_BACKUP / ALIAS_STATUS for the summary.
+# Expose shell/aliases.sh at the conventional per-shell filename so the aliases
+# live in their own editable file: ~/.bash_aliases or ~/.zsh_aliases. If you
+# already have your own file there, it is left alone: shell/common.sh loads it
+# after the repo's aliases, so yours take precedence.
+# Records ALIAS_LINK / ALIAS_STATUS for the summary.
 link_aliases() {
   src="$DOTFILES_DIR/shell/aliases.sh"
   case "$OS" in
     macos) dst="$HOME/.zsh_aliases" ;;
     *)     dst="$HOME/.bash_aliases" ;;
   esac
-  ALIAS_LINK="$dst"; ALIAS_BACKUP=""; ALIAS_STATUS="linked"
+  ALIAS_LINK="$dst"; ALIAS_STATUS="linked"
 
-  if [ -L "$dst" ] && [ "$(readlink "$dst")" = "$src" ]; then
-    info "Aliases already linked: $dst"
-    ALIAS_STATUS="already"
-    return
+  if [ -L "$dst" ]; then
+    target="$(readlink "$dst")"
+    if [ "$target" = "$src" ]; then
+      info "Aliases already linked: $dst"
+      ALIAS_STATUS="already"
+      return
+    fi
+    case "$target" in
+      */shell/aliases.sh)
+        # Our link from an old checkout location: point it at this one.
+        ln -sfn "$src" "$dst"
+        info "Re-linked $dst -> $src (was $target)"
+        ALIAS_STATUS="relinked"
+        return ;;
+    esac
   fi
   if [ -e "$dst" ] || [ -L "$dst" ]; then
-    ALIAS_BACKUP="$dst.backup.$(date +%Y%m%d%H%M%S)"
-    mv "$dst" "$ALIAS_BACKUP"
-    info "Backed up existing $dst -> $ALIAS_BACKUP"
+    info "Kept your existing $dst (loaded after the repo aliases)."
+    ALIAS_STATUS="kept"
+    return
   fi
   ln -s "$src" "$dst"
   info "Linked $dst -> $src"
@@ -294,28 +390,36 @@ if [ "$DO_LINK" -eq 1 ]; then
 
   # --- Summary of what changed ---
   printf '\n'
-  info "Setup complete. What changed in your shell config:"
-  if [ "$CFG_STATUS" = "already" ]; then
-    printf '  • %s already had the dotfiles include block — no change.\n' "$CFG_RC"
-  else
-    if [ "$CFG_STATUS" = "updated" ]; then
-      printf '  • Replaced the outdated include block in %s\n' "$CFG_RC"
-    else
-      printf '  • Appended a marked include block to %s\n' "$CFG_RC"
-    fi
-    printf '    that sources functions, exports and the agnoster theme from this\n'
-    printf '    repo (%s).\n' "$DOTFILES_DIR"
-    [ -n "$CFG_BACKUP" ] && printf '  • Backed up the previous %s to %s\n' "$CFG_RC" "$CFG_BACKUP"
-  fi
-  if [ "$ALIAS_STATUS" = "already" ]; then
-    printf '  • Your aliases file %s already links to the repo — no change.\n' "$ALIAS_LINK"
-  else
-    printf '  • Linked your aliases file %s -> %s\n' "$ALIAS_LINK" "$DOTFILES_DIR/shell/aliases.sh"
-    [ -n "$ALIAS_BACKUP" ] && printf '  • Backed up your previous %s to %s\n' "$ALIAS_LINK" "$ALIAS_BACKUP"
-  fi
-  printf '  • The rest of %s is preserved (only the marked block was added).\n' "$CFG_RC"
+  info "What changed in your shell config:"
+  case "$CFG_STATUS" in
+    already) printf '  • %s already had the dotfiles include block — no change.\n' "$CFG_RC" ;;
+    damaged) printf '  • %s was NOT changed: its dotfiles block markers are damaged.\n' "$CFG_RC" ;;
+    updated|appended)
+      if [ "$CFG_STATUS" = "updated" ]; then
+        printf '  • Updated the outdated include block in %s (in place)\n' "$CFG_RC"
+      else
+        printf '  • Appended a marked include block to %s\n' "$CFG_RC"
+      fi
+      printf '    that sources functions, exports and the agnoster theme from this\n'
+      printf '    repo (%s).\n' "$DOTFILES_DIR"
+      printf '  • Backed up the previous %s to %s\n' "$CFG_RC" "$CFG_BACKUP"
+      printf '  • The rest of %s is unchanged (only the marked block was touched).\n' "$CFG_RC"
+      ;;
+  esac
+  case "$ALIAS_STATUS" in
+    already)  printf '  • Your aliases file %s already links to the repo — no change.\n' "$ALIAS_LINK" ;;
+    kept)     printf '  • Kept your own aliases file %s; it loads after the repo aliases.\n' "$ALIAS_LINK" ;;
+    relinked) printf '  • Re-pointed %s at %s\n' "$ALIAS_LINK" "$DOTFILES_DIR/shell/aliases.sh" ;;
+    linked)   printf '  • Linked your aliases file %s -> %s\n' "$ALIAS_LINK" "$DOTFILES_DIR/shell/aliases.sh" ;;
+  esac
   printf '\n'
-  warn "Reload your shell to see the changes:  exec \"\$SHELL\" -l   (or open a new terminal)"
+  info "Reload your shell to see the changes:  exec \"\$SHELL\" -l   (or open a new terminal)"
 else
   info "Skipping shell configuration (--packages)."
+fi
+
+if [ "$WARNINGS" -gt 0 ]; then
+  printf '\n\033[1;33m[!]\033[0m Finished with %d warning(s); see the [!] lines above.\n' "$WARNINGS" >&2
+else
+  info "Done."
 fi

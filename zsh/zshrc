@@ -2,18 +2,24 @@
 # Sourced from your existing ~/.zshrc by an include block that install.sh
 # appends (your original file is backed up, never replaced).
 
-# Location of the dotfiles checkout (override in ~/.shell.local if needed).
+# Location of the dotfiles checkout. The include block install.sh adds to your
+# ~/.zshrc sets it; after moving the checkout, re-run `./install.sh --link`.
 export DOTFILES="${DOTFILES:-$HOME/.dotfiles}"
 
 # --- Oh My Zsh ---------------------------------------------------------------
 # Framework lives in ~/.oh-my-zsh (cloned by install.sh). It owns the prompt
 # (agnoster theme), completion, and history. Source it *before* the shared
 # config so our aliases/exports below take precedence over the defaults.
-export ZSH="$HOME/.oh-my-zsh"
-ZSH_THEME="agnoster"                 # needs a Powerline/Nerd font to render
-DISABLE_AUTO_UPDATE="true"
-plugins=(git)
-[ -r "$ZSH/oh-my-zsh.sh" ] && source "$ZSH/oh-my-zsh.sh"
+#
+# If your own ~/.zshrc already loaded Oh My Zsh (its `omz` function exists),
+# it is not loaded a second time and your theme/plugin settings are kept.
+if (( ! $+functions[omz] )) && [ -r "$HOME/.oh-my-zsh/oh-my-zsh.sh" ]; then
+  export ZSH="$HOME/.oh-my-zsh"
+  ZSH_THEME="agnoster"                 # needs a Powerline/Nerd font to render
+  DISABLE_AUTO_UPDATE="true"
+  plugins=(git)
+  source "$ZSH/oh-my-zsh.sh"
+fi
 
 # --- Shared configuration (aliases, exports, functions, tooling) -------------
-[ -r "$DOTFILES/shell/common.sh" ] && . "$DOTFILES/shell/common.sh"
+if [ -r "$DOTFILES/shell/common.sh" ]; then . "$DOTFILES/shell/common.sh"; fi
