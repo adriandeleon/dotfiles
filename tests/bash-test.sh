@@ -25,8 +25,10 @@ new_home() { # new_home <name> - a fresh HOME with Debian's stock ~/.bashrc
   if [ -r "$SKEL" ]; then cp "$SKEL" "$h/.bashrc"; else : > "$h/.bashrc"; fi
   echo "$h"
 }
-link() { HOME="$1" "$REPO/install.sh" --link >"$1/install.log" 2>&1; }
+# XDG_CONFIG_HOME is cleared so the Emacs link lands in the temp HOME too.
+link() { HOME="$1" XDG_CONFIG_HOME="" "$REPO/install.sh" --link >"$1/install.log" 2>&1; }
 count() { grep -cxF "$2" "$1" || true; }
+absent() { [ ! -e "$1" ] && [ ! -L "$1" ]; }
 # Run commands in an interactive bash fed on stdin, the way a terminal would.
 interactive() { printf '%s\n' "$2" | HOME="$1" bash -i 2>/dev/null; }
 
@@ -35,6 +37,8 @@ h="$(new_home fresh)"
 link "$h"
 check "fresh: block appended once"           [ "$(count "$h/.bashrc" "$BEGIN")" = 1 ]
 check "fresh: ~/.bash_aliases links to repo" [ "$(readlink "$h/.bash_aliases")" = "$REPO/shell/aliases.sh" ]
+check "fresh: ~/.config/emacs links to repo" [ "$(readlink "$h/.config/emacs")" = "$REPO/emacs" ]
+check "fresh: the linked config has init.el" [ -f "$h/.config/emacs/init.el" ]
 backups_before="$(find "$h" -name '*.backup.*' | wc -l)"
 link "$h"
 check "re-run: still one block"              [ "$(count "$h/.bashrc" "$BEGIN")" = 1 ]
@@ -91,6 +95,30 @@ link "$h"
 check "own aliases: file kept as-is"         [ ! -L "$h/.bash_aliases" ]
 out="$(interactive "$h" 'alias myalias')"
 check "own aliases: still loaded"            grep -q "echo mine" <<<"$out"
+
+# --- Emacs config link -------------------------------------------------------
+# An existing ~/.emacs.d takes precedence over ~/.config/emacs: don't link.
+h="$(new_home own-emacs-d)"
+mkdir -p "$h/.emacs.d"
+link "$h"
+check "own ~/.emacs.d: no ~/.config/emacs link" absent "$h/.config/emacs"
+check "own ~/.emacs.d: summary says why"     grep -q 'Emacs would load your' "$h/install.log"
+# An existing ~/.config/emacs of your own is kept.
+h="$(new_home own-config-emacs)"
+mkdir -p "$h/.config/emacs" && echo ';; mine' > "$h/.config/emacs/init.el"
+link "$h"
+check "own ~/.config/emacs: not replaced"    [ ! -L "$h/.config/emacs" ]
+check "own ~/.config/emacs: contents kept"   grep -q mine "$h/.config/emacs/init.el"
+# A link left behind by a checkout that has since moved is re-pointed.
+h="$(new_home emacs-moved)"
+mkdir -p "$h/.config" && ln -s "$WORK/old-checkout/emacs" "$h/.config/emacs"
+link "$h"
+check "moved checkout: emacs link re-pointed" [ "$(readlink "$h/.config/emacs")" = "$REPO/emacs" ]
+# Anything else that ~/.config/emacs links to is somebody else's: keep it.
+h="$(new_home emacs-other-link)"
+mkdir -p "$h/elsewhere/emacs" "$h/.config" && ln -s "$h/elsewhere/emacs" "$h/.config/emacs"
+link "$h"
+check "other emacs link: kept"               [ "$(readlink "$h/.config/emacs")" = "$h/elsewhere/emacs" ]
 
 # --- Unsafe checkout paths are refused ---------------------------------------
 bad="$WORK/bad\$dir"

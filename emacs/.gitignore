@@ -1,0 +1,13 @@
+# install.sh links ~/.config/emacs to this directory, so everything Emacs
+# writes at runtime (elpa/, eln-cache/, tree-sitter/, history files, custom.el,
+# backups...) lands here too. Track only the config itself.
+/*
+!/.gitignore
+!/early-init.el
+!/init.el
+
+# Lisp files in user-lisp/ are byte-compiled and added to load-path at startup
+# (new in Emacs 31); keep the sources, not what Emacs generates from them.
+!/user-lisp/
+/user-lisp/**/*.elc
+/user-lisp/.user-lisp-autoloads.el
