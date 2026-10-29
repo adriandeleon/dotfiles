@@ -42,6 +42,11 @@ startup_errors() {
 new_home() {
   local h=$WORK/$1
   mkdir -p $h
+  # Debian/Ubuntu's global /etc/zsh/zshrc runs compinit for every interactive
+  # zsh; on the CI runner it finds group-writable dirs, can't ask about them
+  # without a terminal, and prints "compinit: initialization aborted". That's
+  # the system's rc, not ours: skip it the documented way.
+  print 'skip_global_compinit=1' > $h/.zshenv
   case ${2:-fake} in
     fake)
       mkdir -p $h/.oh-my-zsh
