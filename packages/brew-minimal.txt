@@ -1,6 +1,7 @@
 # Minimal Homebrew package set (install.sh --minimal).
 # A lean subset of packages/brew.txt — core CLI tools only.
-# (ncat ships with nmap on Homebrew; zip/unzip are built into macOS.)
+# (ncat ships with nmap on Homebrew; zip/unzip are built into macOS; no
+# bash-completion, since macOS uses zsh.)
 
 git
 curl
@@ -14,4 +15,3 @@ duf              # disk usage / mounts (df alternative)
 nmap             # network scanner (also provides ncat)
 tmux
 jed              # lightweight text editor
-bash-completion@2

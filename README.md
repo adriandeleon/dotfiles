@@ -26,7 +26,7 @@ framework + agnoster theme). The installer **appends** them to your existing
   - *system:* htop, btop, fastfetch, tmux
   - *network:* nmap, ncat
   - *editors:* neovim, emacs, jed
-  - *other:* git, jq, zoxide (`z`), tldr, plus build/archive basics
+  - *other:* git, jq, zoxide (`z`), plus build/archive basics
 - Handy **aliases, functions, and fzf helpers**, discoverable any time with
   **`dothelp`**.
 
@@ -38,6 +38,7 @@ Tested on **Debian 13 (trixie)** and **macOS**. A leaner subset is available via
 ```text
 .
 ├── install.sh            # bootstrap: install packages + configure shells
+├── .shellcheckrc         # lint settings (CI: .github/workflows/lint.yml)
 ├── packages/
 │   ├── apt.txt           # CLI tools for Debian (apt)
 │   ├── brew.txt          # the same CLI tools for macOS (Homebrew)
@@ -68,23 +69,25 @@ The installer:
 2. Installs the packages from `packages/brew.txt` or `packages/apt.txt`
    (installing Homebrew first on macOS if needed).
 3. Installs [SDKMAN](https://sdkman.io/) (JVM SDK manager) via its own script
-   if it isn't already present. It's wired up for both shells in
-   `shell/common.sh`.
+   if it isn't already present, telling it not to edit your rc files. It's
+   wired up for both shells in `shell/common.sh`.
 4. Clones the framework for your platform — [Oh My Bash](https://github.com/ohmybash/oh-my-bash)
    into `~/.oh-my-bash` on Debian, or [Oh My Zsh](https://github.com/ohmyzsh/ohmyzsh)
    into `~/.oh-my-zsh` on macOS (the **agnoster** theme is enabled either way).
 5. Installs the **JetBrains Mono Nerd Font** so the agnoster glyphs render: a
    Homebrew cask on macOS, or the Nerd Fonts release archive into
-   `~/.local/share/fonts` on Debian (then refreshes the font cache).
+   `~/.local/share/fonts` on Debian (checked against a pinned SHA-256, then
+   the font cache is refreshed).
 6. **Adds the config to your existing rc file without replacing it.** For the
    platform's native shell (`~/.bashrc` on Debian, `~/.zshrc` on macOS) it backs
    up the file (timestamped copy) and appends a small managed include block that
    sources this repo's `bash/bashrc` / `zsh/zshrc`. Your original settings stay
    in place above the block.
 7. **Links your aliases file to the conventional name** — `~/.bash_aliases` on
-   Debian (sourced natively by the stock `~/.bashrc`) or `~/.zsh_aliases` on
-   macOS — both pointing at `shell/aliases.sh`. Any existing file there is backed
-   up first. Edit your aliases at that path or in the repo; it's the same file.
+   Debian or `~/.zsh_aliases` on macOS — both pointing at `shell/aliases.sh`.
+   `shell/common.sh` sources it after Oh My Bash/Zsh, so your aliases win over
+   the framework's. Any existing file there is backed up first. Edit your
+   aliases at that path or in the repo; it's the same file.
 8. **Prints a summary** of exactly what it changed (and where it put backups).
 
 When it finishes, **reload your shell** to pick up the changes:
@@ -106,14 +109,19 @@ Options:
 ./install.sh --help
 ```
 
+Options can be combined — e.g. `./install.sh --minimal --packages` installs only
+the minimal package set.
+
 `--minimal` installs just the core CLI tools from `packages/{apt,brew}-minimal.txt`
-(git, curl, fzf, ripgrep, bat, eza, htop, btop, duf, nmap, ncat, tmux, jed, zip,
-unzip, bash-completion) and still wires up your aliases/functions — but **skips**
+(git, curl, fzf, ripgrep, bat, eza, htop, btop, duf, nmap, ncat, tmux, jed, plus
+zip, unzip and bash-completion on Debian) and still wires up your
+aliases/functions — but **skips**
 SDKMAN, the Oh My Bash/Zsh framework, and the Nerd Font. Good for servers or
 throwaway boxes where you just want the essentials.
 
 It is safe to re-run; the include block is added only once and backups are
-timestamped.
+timestamped. If you move the checkout, re-run `./install.sh --link` from the new
+location and the include block is updated to point there.
 
 ## Cheat-sheet
 
@@ -145,7 +153,7 @@ the binary-name differences:
 | ncat | (bundled with `nmap`)| `ncat`    | `ncat`           | —                |
 
 `eza`, `btop`, and `fastfetch` are only packaged by apt on Debian 13+/Ubuntu
-24.04. The installer runs a single `apt install` for the whole list, so on an
+24.04. The installer runs a single `apt-get install` for the whole list, so on an
 older release where one of these is missing apt installs **none** of them — drop
 the unavailable packages from `packages/apt.txt` (or upgrade the release) and
 re-run. The `ls`/`ll`/`la` aliases fall back to coloured `ls` when `eza` is

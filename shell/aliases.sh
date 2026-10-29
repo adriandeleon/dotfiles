@@ -10,8 +10,9 @@ if command -v eza >/dev/null 2>&1; then
   alias la='eza --icons -a --group-directories-first'
   alias lt='eza --icons --tree --level=2'
 else
-  # macOS ls uses -G for colour; GNU ls uses --color=auto
-  if ls --color=auto >/dev/null 2>&1; then
+  # macOS ls uses -G for colour; GNU ls uses --color=auto. `command` makes the
+  # probe use the real ls binary, never an alias.
+  if command ls --color=auto >/dev/null 2>&1; then
     alias ls='ls --color=auto'
   else
     alias ls='ls -G'
@@ -23,18 +24,22 @@ fi
 # --- Distro binary-name differences -----------------------------------------
 # Debian ships fd as `fdfind` and bat as `batcat`; alias to the common names so
 # `fd`/`bat` work everywhere (native on macOS, mapped on Debian).
-command -v fdfind  >/dev/null 2>&1 && ! command -v fd  >/dev/null 2>&1 && alias fd='fdfind'
-command -v batcat  >/dev/null 2>&1 && ! command -v bat >/dev/null 2>&1 && alias bat='batcat'
+command -v fd  >/dev/null 2>&1 || { command -v fdfind >/dev/null 2>&1 && alias fd='fdfind'; }
+command -v bat >/dev/null 2>&1 || { command -v batcat >/dev/null 2>&1 && alias bat='batcat'; }
 
 # --- Editors -----------------------------------------------------------------
-alias vi='nvim'
-alias vim='nvim'
-alias ovim='/usr/bin/vim'          # the original vim, bypassing the nvim alias
+# Only redirect vi/vim when neovim is actually installed (the --minimal
+# package sets don't include it).
+if command -v nvim >/dev/null 2>&1; then
+  alias vi='nvim'
+  alias vim='nvim'
+fi
+alias ovim='command vim'           # the original vim, bypassing the nvim alias
 alias ec='emacsclient'
 
 # editora: personal editor wrapper and its variants.
 alias edi='editora --single-window'
-alias edis='editora --simple-ui --single-window'
+alias edis='editora --simple --single-window'
 alias ediz='editora --zen --single-window'
 alias edie='editora --expert --single-window'
 alias edif='editoraf'

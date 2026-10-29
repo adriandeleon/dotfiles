@@ -2,13 +2,14 @@
 # POSIX-compatible: must work in both shells.
 
 # Preferred editor
-if command -v nvim >/dev/null 2>&1; then
-  export EDITOR="nvim"
-  export VISUAL="nvim"
-else
-  export EDITOR="vim"
-  export VISUAL="vim"
-fi
+for _editor in nvim vim vi; do
+  if command -v "$_editor" >/dev/null 2>&1; then
+    export EDITOR="$_editor"
+    export VISUAL="$_editor"
+    break
+  fi
+done
+unset _editor
 
 export PAGER="less"
 export LESS="-R"
@@ -38,4 +39,5 @@ for dir in "$HOME/.local/bin" "$HOME/bin"; do
     *) [ -d "$dir" ] && PATH="$dir:$PATH" ;;
   esac
 done
+unset dir
 export PATH

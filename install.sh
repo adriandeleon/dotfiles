@@ -17,6 +17,8 @@
 #                           # skips SDKMAN, the shell framework, and the font
 #   ./install.sh --link     # only configure the shell rc files, skip packages
 #   ./install.sh --packages # only install packages, skip shell config
+#
+# Options can be combined, e.g. `--minimal --packages`.
 
 set -euo pipefail
 
@@ -27,14 +29,20 @@ export DOTFILES="$DOTFILES_DIR"
 DO_PACKAGES=1
 DO_LINK=1
 MINIMAL=0
-case "${1:-}" in
-  --minimal)  MINIMAL=1 ;;
-  --link)     DO_PACKAGES=0 ;;
-  --packages) DO_LINK=0 ;;
-  --help|-h)  grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-  "")         ;;
-  *) echo "unknown option: $1 (try --help)" >&2; exit 1 ;;
-esac
+for arg in "$@"; do
+  case "$arg" in
+    --minimal)  MINIMAL=1 ;;
+    --link)     DO_PACKAGES=0 ;;
+    --packages) DO_LINK=0 ;;
+    # Print only the header comment block (stops at the first non-comment line).
+    --help|-h)  awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "$0"; exit 0 ;;
+    *) echo "unknown option: $arg (try --help)" >&2; exit 1 ;;
+  esac
+done
+if [ "$DO_PACKAGES" -eq 0 ] && [ "$DO_LINK" -eq 0 ]; then
+  echo "--link and --packages can't be combined (try --help)" >&2
+  exit 1
+fi
 
 info()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn()  { printf '\033[1;33m[!]\033[0m %s\n' "$*" >&2; }
@@ -84,26 +92,29 @@ install_debian_packages() {
   # Don't abort the whole install if `apt update` reports an error — a single
   # broken third-party repo (bad signature, EOL suite, etc.) shouldn't stop us
   # from installing packages, since the working repos still refreshed.
-  sudo apt update -y || warn "apt update reported errors (likely an unrelated repo); continuing."
+  # apt-get rather than apt: apt's CLI isn't stable for scripts.
+  sudo apt-get update || warn "apt-get update reported errors (likely an unrelated repo); continuing."
   info "Installing apt packages..."
   # A single apt install for the whole list. If a package is unavailable on
   # this release (e.g. eza/btop/fastfetch on older Debian) apt installs none of
   # them — drop it from the package list or upgrade the release.
   # shellcheck disable=SC2046
-  sudo apt install -y --no-install-recommends \
+  sudo apt-get install -y --no-install-recommends \
     $(read_packages "$APT_LIST") \
     || warn "Some apt packages failed to install; continuing."
 }
 
 # --- SDKMAN (JVM SDK manager) ------------------------------------------------
 # Installed via its own script (not apt/brew); same on macOS and Debian.
+# rcupdate=false stops it appending its own init lines to ~/.bashrc/~/.zshrc:
+# shell/common.sh already sources sdkman-init.sh.
 install_sdkman() {
   if [ -d "$HOME/.sdkman" ]; then
     info "SDKMAN already installed."
     return
   fi
   info "Installing SDKMAN..."
-  curl -s "https://get.sdkman.io" | bash || warn "SDKMAN install failed; skipping."
+  curl -fsSL "https://get.sdkman.io?rcupdate=false" | bash || warn "SDKMAN install failed; skipping."
 }
 
 # --- Shell frameworks (Oh My Bash / Oh My Zsh) -------------------------------
@@ -131,7 +142,10 @@ install_shell_frameworks() {
 # --- JetBrains Mono Nerd Font ------------------------------------------------
 # The agnoster theme needs a Nerd/Powerline font for its glyphs. macOS uses a
 # Homebrew cask; Debian downloads the font archive from the Nerd Fonts release.
-NERD_FONT_VERSION="v3.2.1"
+NERD_FONT_VERSION="v3.5.1"
+# SHA-256 of JetBrainsMono.zip, from that release's SHA-256.txt. Update both
+# together when bumping the version.
+NERD_FONT_SHA256="fab782a66f7d3019da64f6572db9fc5d3a4bcb19f9fa13e2d8a62e3693d6396e"
 
 install_font_macos() {
   info "Installing JetBrains Mono Nerd Font (cask)..."
@@ -153,12 +167,13 @@ install_font_debian() {
   url="https://github.com/ryanoasis/nerd-fonts/releases/download/$NERD_FONT_VERSION/JetBrainsMono.zip"
   tmp="$(mktemp -d)"
   if curl -fsSL -o "$tmp/JetBrainsMono.zip" "$url" \
+      && printf '%s  %s\n' "$NERD_FONT_SHA256" "$tmp/JetBrainsMono.zip" | sha256sum -c --quiet - \
       && mkdir -p "$dest" \
       && unzip -oq "$tmp/JetBrainsMono.zip" -d "$dest"; then
     fc-cache -f "$HOME/.local/share/fonts" >/dev/null 2>&1
     info "Font installed to $dest"
   else
-    warn "Font download/extract failed; skipping."
+    warn "Font download/verify/extract failed; skipping."
     rm -rf "$dest"
   fi
   rm -rf "$tmp"
@@ -193,7 +208,8 @@ fi
 # Rather than replacing your rc files, we back them up and append a small block
 # that sources the matching file from this repo. Re-running is idempotent: the
 # block is added only once (detected by the marker), and your original content
-# is preserved above it.
+# is preserved above it. If the repo has moved since, the block is rewritten to
+# point at the new location.
 BLOCK_BEGIN="# >>> dotfiles (managed by install.sh) >>>"
 BLOCK_END="# <<< dotfiles (managed by install.sh) <<<"
 
@@ -206,9 +222,13 @@ include_config() {
   [ -e "$dst" ] || { touch "$dst"; info "Created $dst"; }
 
   if grep -qF "$BLOCK_BEGIN" "$dst" 2>/dev/null; then
-    info "Already configured: $dst"
-    CFG_STATUS="already"
-    return
+    if grep -qxF "export DOTFILES=\"$DOTFILES_DIR\"" "$dst"; then
+      info "Already configured: $dst"
+      CFG_STATUS="already"
+      return
+    fi
+    # The block points at an old checkout location: replace it below.
+    CFG_STATUS="updated"
   fi
 
   # Back up the original (a copy — the file stays in place) before appending.
@@ -216,6 +236,12 @@ include_config() {
   cp "$dst" "$backup"
   CFG_BACKUP="$backup"
   info "Backed up $dst -> $backup"
+
+  if [ "$CFG_STATUS" = "updated" ]; then
+    # Rewrite in place (keeps the file's inode/permissions), minus the old block.
+    awk -v b="$BLOCK_BEGIN" -v e="$BLOCK_END" \
+      '$0 == b { skip = 1 } !skip { print } $0 == e { skip = 0 }' "$backup" > "$dst"
+  fi
 
   {
     printf '\n%s\n' "$BLOCK_BEGIN"
@@ -272,7 +298,11 @@ if [ "$DO_LINK" -eq 1 ]; then
   if [ "$CFG_STATUS" = "already" ]; then
     printf '  • %s already had the dotfiles include block — no change.\n' "$CFG_RC"
   else
-    printf '  • Appended a marked include block to %s\n' "$CFG_RC"
+    if [ "$CFG_STATUS" = "updated" ]; then
+      printf '  • Replaced the outdated include block in %s\n' "$CFG_RC"
+    else
+      printf '  • Appended a marked include block to %s\n' "$CFG_RC"
+    fi
     printf '    that sources functions, exports and the agnoster theme from this\n'
     printf '    repo (%s).\n' "$DOTFILES_DIR"
     [ -n "$CFG_BACKUP" ] && printf '  • Backed up the previous %s to %s\n' "$CFG_RC" "$CFG_BACKUP"

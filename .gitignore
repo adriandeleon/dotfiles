@@ -1,8 +1,2 @@
-# Local, machine-specific overrides (sourced by shell/common.sh, never tracked)
-.shell.local
-
-# Backups created by install.sh
-*.backup.*
-
 # OS cruft
 .DS_Store
