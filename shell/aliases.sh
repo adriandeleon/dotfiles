@@ -24,8 +24,8 @@ fi
 # --- Distro binary-name differences -----------------------------------------
 # Debian ships fd as `fdfind` and bat as `batcat`; alias to the common names so
 # `fd`/`bat` work everywhere (native on macOS, mapped on Debian).
-command -v fdfind  >/dev/null 2>&1 && ! command -v fd  >/dev/null 2>&1 && alias fd='fdfind'
-command -v batcat  >/dev/null 2>&1 && ! command -v bat >/dev/null 2>&1 && alias bat='batcat'
+command -v fd  >/dev/null 2>&1 || { command -v fdfind >/dev/null 2>&1 && alias fd='fdfind'; }
+command -v bat >/dev/null 2>&1 || { command -v batcat >/dev/null 2>&1 && alias bat='batcat'; }
 
 # --- Editors -----------------------------------------------------------------
 # Only redirect vi/vim when neovim is actually installed (the --minimal
