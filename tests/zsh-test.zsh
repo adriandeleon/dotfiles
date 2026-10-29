@@ -31,7 +31,11 @@ TIMEOUT=()
 clean_env() { local h=$1; shift; env -i HOME=$h PATH=$TEST_PATH TERM=dumb USER=${USER:-test} "$@"; }
 # interactive <home> <commands> - stdout of an interactive zsh fed <commands>
 interactive() { print -r -- "$2" | clean_env $1 $TIMEOUT zsh -i 2>/dev/null; }
-startup_errors() { clean_env $1 $TIMEOUT zsh -ic true 2>&1 >/dev/null; }
+# startup_errors <home> - anything an interactive zsh prints on stderr while
+# loading its rc files, minus zsh's own complaint about having no terminal.
+startup_errors() {
+  clean_env $1 $TIMEOUT zsh -ic true 2>&1 >/dev/null | grep -v "not interactive and can't open terminal"
+}
 
 # new_home <name> [fake|real|none] - a temp HOME whose ~/.zshrc has the include
 # block, plus a stand-in Oh My Zsh (default), the real one, or none.
@@ -85,8 +89,11 @@ check "no stray cd function"               same "$(interactive $h '(( $+function
 check "gb is our function, not OMZ's alias" same "$(interactive $h 'whence -w gb')" "gb: function"
 check "ll is ours, not the framework's"    ours_ll "$(interactive $h 'alias ll')"
 check "ls stays the real ls"               same "$(interactive $h 'alias ls' | cut -c1-8)" "ls='ls -"
+# `unalias up` gets a line of its own: zsh expands aliases while parsing a whole
+# line, before any of it runs, so on one line `up 1` would still be the
+# framework's alias.
 check "up changes directory, keeps PATH" \
-  same "$(interactive $h 'unalias up; before=$PATH; cd /tmp && up 1; print -r -- "$PWD $(( ${#PATH} == ${#before} ))"')" "/ 1"
+  same "$(interactive $h $'unalias up\nbefore=$PATH; cd /tmp && up 1; print -r -- "$PWD $(( ${#PATH} == ${#before} ))"')" "/ 1"
 check "framework loads once, also on reload" \
   same "$(interactive $h '. ~/.zshrc; print -r -- "loads=$FAKE_OMZ_LOADS status=$?"')" "loads=1 status=0"
 check "dothelp runs and cleans up helpers" \
@@ -113,6 +120,10 @@ check "self-including rc still starts a shell" same "$(interactive $h 'print sta
 # --- The real Oh My Zsh ------------------------------------------------------
 if [[ -n ${OMZ_SRC:-} && -r $OMZ_SRC/oh-my-zsh.sh ]]; then
   h=$(new_home real-omz real)
+  # The CI checkout (and runner dirs on fpath) are group-writable, so Oh My
+  # Zsh's compaudit would print an "insecure directories" warning into every
+  # session. That's about the runner, not this config; use OMZ's own switch.
+  { print 'ZSH_DISABLE_COMPFIX=true'; cat $h/.zshrc } > $h/.zshrc.new && mv $h/.zshrc.new $h/.zshrc
   check "real OMZ: first prompt sees a success status" same "$(interactive $h 'print -r -- "status=$?"')" "status=0"
   check "real OMZ: every shared function is defined"   all_functions $h
   check "real OMZ: gb is our function"                 same "$(interactive $h 'whence -w gb')" "gb: function"
