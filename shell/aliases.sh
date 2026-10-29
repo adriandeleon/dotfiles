@@ -1,25 +1,30 @@
 # shell/aliases.sh - aliases shared by bash and zsh
-# POSIX-compatible: must work in both shells. shell/common.sh loads this after
-# the functions and tool integrations, so these aliases never leak into their
-# definitions.
+# POSIX-compatible: must work in both shells.
+
+# Only take effect when shell/common.sh loads this file, which it does after
+# the functions, the framework and the tool integrations. Debian's stock
+# ~/.bashrc also sources ~/.bash_aliases (which install.sh links here) much
+# earlier, and aliases that exist when a function is defined get baked into it
+# (e.g. `mkdir -p -p` inside SDKMAN). To reload aliases, use `reload`.
+if [ -z "${_DOTFILES_LOADING_ALIASES:-}" ]; then return 0; fi
 
 # --- Listing -----------------------------------------------------------------
-# Prefer eza (with icons) if installed, otherwise fall back to coloured ls.
+# `ls` stays the real ls (with colour), so its usual flags (-ltr, -S...) keep
+# working; eza has different options. eza (with icons) backs ll/la/lt instead.
+# macOS ls uses -G for colour; GNU ls uses --color=auto. `command` makes the
+# probe use the real ls binary, never an alias; `-d /` keeps it from listing
+# the current directory (slow in huge or network directories).
+if command ls --color=auto -d / >/dev/null 2>&1; then
+  alias ls='ls --color=auto'
+else
+  alias ls='ls -G'
+fi
 if command -v eza >/dev/null 2>&1; then
   alias eza='eza --icons'
-  alias ls='eza --icons --group-directories-first'
   alias ll='eza --icons -lah --group-directories-first --git'
   alias la='eza --icons -a --group-directories-first'
   alias lt='eza --icons --tree --level=2'
 else
-  # macOS ls uses -G for colour; GNU ls uses --color=auto. `command` makes the
-  # probe use the real ls binary, never an alias; `-d /` keeps it from listing
-  # the current directory (slow in huge or network directories).
-  if command ls --color=auto -d / >/dev/null 2>&1; then
-    alias ls='ls --color=auto'
-  else
-    alias ls='ls -G'
-  fi
   alias ll='ls -lah'
   alias la='ls -A'
   command -v tree >/dev/null 2>&1 && alias lt='tree -L 2'

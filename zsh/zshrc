@@ -1,19 +1,47 @@
-# ~/.zshrc - macOS / zsh configuration.
+# zsh/zshrc - macOS / zsh configuration.
 # Sourced from your existing ~/.zshrc by an include block that install.sh
-# appends (your original file is backed up, never replaced).
+# appends (your original file is backed up, never replaced). Don't symlink
+# ~/.zshrc to this file: the include block is what loads it.
+
+# Never load this file from inside itself (e.g. ~/.zshrc symlinked here and
+# the include block appended to it) - that recursion breaks every new shell.
+# $funcstack lists the files (and functions) being executed, this one first;
+# checking it (rather than setting a flag) still lets `. ~/.zshrc` reload.
+for _dotfiles_src in "${(@)funcstack[2,-1]}"; do
+  if [[ "$_dotfiles_src" -ef "${funcstack[1]}" ]]; then unset _dotfiles_src; return 0; fi
+done
+unset _dotfiles_src
 
 # Location of the dotfiles checkout. The include block install.sh adds to your
 # ~/.zshrc sets it; after moving the checkout, re-run `./install.sh --link`.
 export DOTFILES="${DOTFILES:-$HOME/.dotfiles}"
+
+# --- Homebrew ----------------------------------------------------------------
+# Put Homebrew on PATH and its completions on fpath *before* Oh My Zsh runs
+# compinit; otherwise completions for brew-installed tools are never picked
+# up. (shell/exports.sh skips this when HOMEBREW_PREFIX is already set.)
+if [ -z "${HOMEBREW_PREFIX:-}" ]; then
+  for _dotfiles_brew in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+    if [ -x "$_dotfiles_brew" ]; then eval "$("$_dotfiles_brew" shellenv)"; break; fi
+  done
+  unset _dotfiles_brew
+fi
+if [ -n "${HOMEBREW_PREFIX:-}" ] && [ -d "$HOMEBREW_PREFIX/share/zsh/site-functions" ]; then
+  fpath=("$HOMEBREW_PREFIX/share/zsh/site-functions" $fpath)
+  typeset -U fpath
+fi
 
 # --- Oh My Zsh ---------------------------------------------------------------
 # Framework lives in ~/.oh-my-zsh (cloned by install.sh). It owns the prompt
 # (agnoster theme), completion, and history. Source it *before* the shared
 # config so our aliases/exports below take precedence over the defaults.
 #
-# If your own ~/.zshrc already loaded Oh My Zsh (its `omz` function exists),
-# it is not loaded a second time and your theme/plugin settings are kept.
-if (( ! $+functions[omz] )) && [ -r "$HOME/.oh-my-zsh/oh-my-zsh.sh" ]; then
+# Skipped when your own ~/.zshrc already loaded Oh My Zsh (its `omz` function
+# exists; your theme/plugin settings are kept), or when you set
+# DOTFILES_NO_FRAMEWORK=1 above the include block, e.g. to keep prezto,
+# powerlevel10k or starship as your prompt.
+if (( ! $+functions[omz] )) && [ -z "${DOTFILES_NO_FRAMEWORK:-}" ] \
+    && [ -r "$HOME/.oh-my-zsh/oh-my-zsh.sh" ]; then
   export ZSH="$HOME/.oh-my-zsh"
   ZSH_THEME="agnoster"                 # needs a Powerline/Nerd font to render
   DISABLE_AUTO_UPDATE="true"

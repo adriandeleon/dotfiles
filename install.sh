@@ -7,9 +7,12 @@
 #      macOS), and the JetBrains Mono Nerd Font.
 #   3. Adds the shell config to the native rc file (~/.bashrc on Debian,
 #      ~/.zshrc on macOS) by backing it up and appending an include block (your
-#      file is NOT replaced).
+#      file is NOT replaced). In ~/.bashrc it also comments out Debian's stock
+#      HISTSIZE=1000 / HISTFILESIZE=2000 lines, which truncate your history.
 #   4. Links ~/.bash_aliases / ~/.zsh_aliases to shell/aliases.sh, unless you
 #      already have your own (that one is kept and still loaded).
+#   5. Links ~/.config/emacs to emacs/, unless you already have an Emacs config
+#      (~/.emacs, ~/.emacs.d or ~/.config/emacs), which is left alone.
 #
 # Safe to re-run: the include block is added only once (and updated in place if
 # the checkout moved); backups are timestamped.
@@ -22,6 +25,7 @@
 #   ./install.sh --packages # only install packages, skip shell config
 #
 # Options can be combined, e.g. `--minimal --packages`.
+# Run it as yourself, not with sudo: it asks for sudo when installing packages.
 
 set -euo pipefail
 
@@ -40,6 +44,14 @@ for arg in "$@"; do
 done
 if [ "$DO_PACKAGES" -eq 0 ] && [ "$DO_LINK" -eq 0 ]; then
   echo "--link and --packages can't be combined (try --help)" >&2
+  exit 1
+fi
+
+# Under sudo, $HOME is root's (or, where sudo keeps HOME, root ends up owning
+# files in yours), so the wrong home directory would be configured.
+if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ]; then
+  echo "install.sh: don't run this with sudo. Run it as $SUDO_USER; it asks for" >&2
+  echo "sudo itself when it needs to install packages." >&2
   exit 1
 fi
 
@@ -82,7 +94,9 @@ info "Detected OS: $OS"
 
 # --- Choose the package set (full vs --minimal) ------------------------------
 if [ "$MINIMAL" -eq 1 ]; then
-  info "Minimal install: core packages only, skipping SDKMAN / framework / font."
+  if [ "$DO_PACKAGES" -eq 1 ]; then
+    info "Minimal install: core packages only, skipping SDKMAN / framework / font."
+  fi
   APT_LIST="$DOTFILES_DIR/packages/apt-minimal.txt"
   BREW_LIST="$DOTFILES_DIR/packages/brew-minimal.txt"
 else
@@ -135,8 +149,17 @@ install_macos_packages() {
   fi
   info "Installing Homebrew packages..."
   # `brew install` with the full list is fine; brew skips already-installed.
+  # If it fails (e.g. one formula was renamed), retry one at a time so the
+  # rest still get installed, and name the ones that didn't.
   # shellcheck disable=SC2086  # split the package list into arguments
-  brew install $pkgs || warn "Some brew packages failed; continuing."
+  if ! brew install $pkgs; then
+    info "The combined brew install failed; retrying one package at a time..."
+    failed=""
+    for p in $pkgs; do
+      brew install "$p" >/dev/null 2>&1 || failed="$failed $p"
+    done
+    if [ -n "$failed" ]; then warn "Couldn't install these brew packages:$failed"; fi
+  fi
 }
 
 install_debian_packages() {
@@ -162,12 +185,19 @@ install_debian_packages() {
   # apt-get rather than apt: apt's CLI isn't stable for scripts.
   $SUDO apt-get update || warn "apt-get update reported errors (likely an unrelated repo); continuing."
   info "Installing apt packages..."
-  # A single apt install for the whole list. If a package is unavailable on
-  # this release (e.g. eza/btop/fastfetch on older Debian) apt installs none of
-  # them — drop it from the package list or upgrade the release.
+  # One apt-get install for the whole list is fastest, but it installs nothing
+  # if any single package doesn't exist on this release (e.g. eza or fastfetch
+  # on older Debian/Ubuntu). In that case retry one package at a time, so the
+  # rest still get installed, and name the ones that didn't.
   # shellcheck disable=SC2086  # split the package list into arguments
-  $SUDO apt-get install -y --no-install-recommends $pkgs \
-    || warn "Some apt packages failed to install; continuing."
+  if ! $SUDO apt-get install -y --no-install-recommends $pkgs; then
+    info "The combined apt install failed; retrying one package at a time..."
+    failed=""
+    for p in $pkgs; do
+      $SUDO apt-get install -y --no-install-recommends "$p" >/dev/null 2>&1 || failed="$failed $p"
+    done
+    if [ -n "$failed" ]; then warn "Couldn't install these apt packages:$failed"; fi
+  fi
 }
 
 # --- SDKMAN (JVM SDK manager) ------------------------------------------------
@@ -175,12 +205,17 @@ install_debian_packages() {
 # rcupdate=false stops it appending its own init lines to ~/.bashrc/~/.zshrc:
 # shell/common.sh already sources sdkman-init.sh.
 install_sdkman() {
-  if [ -d "$HOME/.sdkman" ]; then
+  if [ -d "${SDKMAN_DIR:-$HOME/.sdkman}" ]; then
     info "SDKMAN already installed."
     return
   fi
   info "Installing SDKMAN..."
-  curl -fsSL "https://get.sdkman.io?rcupdate=false" | bash || warn "SDKMAN install failed; skipping."
+  # Download first: piping straight into bash could run a partial script.
+  if ! sdk_script="$(curl -fsSL "https://get.sdkman.io?rcupdate=false")"; then
+    warn "Couldn't download the SDKMAN installer; skipping."
+    return
+  fi
+  bash -c "$sdk_script" || warn "SDKMAN install failed; skipping."
 }
 
 # --- Shell frameworks (Oh My Bash / Oh My Zsh) -------------------------------
@@ -279,9 +314,30 @@ fi
 # is preserved around it. If the block's contents are out of date (e.g. the
 # repo has moved), they are rewritten in place, keeping the block where it is.
 # If the markers look damaged (missing, repeated or out of order), the file is
-# left alone and you're asked to fix it by hand.
+# left alone and you're asked to fix it by hand. Problems that would otherwise
+# abort the script under set -e (a read-only or dangling rc file, one that
+# links into this repo) are reported as warnings instead.
 BLOCK_BEGIN="# >>> dotfiles (managed by install.sh) >>>"
 BLOCK_END="# <<< dotfiles (managed by install.sh) <<<"
+
+# in_repo <path> - true if <path> is a symlink that resolves inside this checkout
+# (e.g. ~/.bashrc -> ~/.dotfiles/bash/bashrc, as GNU stow would set it up).
+in_repo() {
+  local resolved
+  [ -L "$1" ] || return 1
+  resolved="$(readlink -f "$1" 2>/dev/null)" || return 1
+  case "$resolved" in "$DOTFILES_DIR"/*) return 0 ;; esac
+  return 1
+}
+
+# make_backup <file> - copy <file> to a timestamped backup once per run
+# (CFG_BACKUP), so a second change in the same run can't overwrite it.
+make_backup() {
+  if [ -n "$CFG_BACKUP" ]; then return 0; fi
+  CFG_BACKUP="$1.backup.$(date +%Y%m%d%H%M%S)"
+  cp "$1" "$CFG_BACKUP"
+  info "Backed up $1 -> $CFG_BACKUP"
+}
 
 include_config() {
   # include_config <source-in-repo> <target-rc>
@@ -293,7 +349,26 @@ include_config() {
   block_body="$(printf 'export DOTFILES="%s"\nif [ -r "%s" ]; then . "%s"; fi' \
     "$DOTFILES_DIR" "$src" "$src")"
 
-  [ -e "$dst" ] || { touch "$dst"; info "Created $dst"; }
+  # An rc file that *is* a file in this repo would end up loading itself.
+  if [ "$dst" -ef "$src" ] || in_repo "$dst"; then
+    warn "$dst links into this repo; not adding an include block to it (it would load itself)."
+    warn "Replace the link with a regular file (e.g. your distro's default rc), then re-run ./install.sh --link."
+    CFG_STATUS="skipped"
+    return
+  fi
+  if [ -L "$dst" ] && [ ! -e "$dst" ]; then
+    warn "$dst is a broken symlink; left it alone."
+    CFG_STATUS="skipped"
+    return
+  fi
+  if [ ! -e "$dst" ]; then
+    if ! touch "$dst" 2>/dev/null; then
+      warn "Couldn't create $dst; skipping the include block."
+      CFG_STATUS="skipped"
+      return
+    fi
+    info "Created $dst"
+  fi
 
   if grep -qF -e "$BLOCK_BEGIN" -e "$BLOCK_END" "$dst"; then
     # Exactly one begin marker, followed by exactly one end marker.
@@ -316,11 +391,16 @@ include_config() {
     CFG_STATUS="updated"
   fi
 
+  # e.g. managed by Nix/home-manager: say what to add instead of failing.
+  if [ ! -w "$dst" ]; then
+    warn "$dst isn't writable; add these lines to it yourself:"
+    printf '%s\n%s\n%s\n' "$BLOCK_BEGIN" "$block_body" "$BLOCK_END" >&2
+    CFG_STATUS="skipped"
+    return
+  fi
+
   # Back up the original (a copy — the file stays in place) before changing it.
-  backup="$dst.backup.$(date +%Y%m%d%H%M%S)"
-  cp "$dst" "$backup"
-  CFG_BACKUP="$backup"
-  info "Backed up $dst -> $backup"
+  make_backup "$dst"
 
   if [ "$CFG_STATUS" = "updated" ]; then
     # Replace just the lines between the markers. Writing into $dst (rather
@@ -328,12 +408,48 @@ include_config() {
     BODY="$block_body" awk -v b="$BLOCK_BEGIN" -v e="$BLOCK_END" '
       $0 == b { print; print ENVIRON["BODY"]; skip = 1; next }
       $0 == e { skip = 0 }
-      !skip { print }' "$backup" > "$dst"
+      !skip { print }' "$CFG_BACKUP" > "$dst"
     info "Updated the dotfiles include block in $dst"
   else
     printf '\n%s\n%s\n%s\n' "$BLOCK_BEGIN" "$block_body" "$BLOCK_END" >> "$dst"
     info "Appended dotfiles include to $dst"
   fi
+}
+
+# --- Debian's stock history limits -------------------------------------------
+# Debian/Ubuntu's default ~/.bashrc sets HISTSIZE=1000 and HISTFILESIZE=2000.
+# bash truncates the history file the moment HISTFILESIZE is assigned, and that
+# line runs before the include block, so the larger limits in shell/exports.sh
+# can never take effect. Comment out exactly those stock lines (any value you
+# set yourself is left alone). Records HIST_STATUS for the summary.
+HIST_RE='^(HISTSIZE=1000|HISTFILESIZE=2000)[[:space:]]*$'
+disable_stock_history() {
+  dst="$1"; HIST_STATUS="none"
+  [ -f "$dst" ] && grep -Eq "$HIST_RE" "$dst" || return 0
+  if [ ! -w "$dst" ]; then
+    warn "$dst sets HISTSIZE=1000/HISTFILESIZE=2000, which truncate your history; comment them out yourself."
+    return 0
+  fi
+  make_backup "$dst"
+  tmp_rc="$(mktemp)"
+  cp "$dst" "$tmp_rc"
+  awk -v re="$HIST_RE" '
+    $0 ~ re { print "# " $0 "  # disabled by dotfiles install.sh: truncated your history (see shell/exports.sh)"; next }
+    { print }' "$tmp_rc" > "$dst"
+  rm -f "$tmp_rc"
+  HIST_STATUS="disabled"
+  info "Commented out the stock HISTSIZE/HISTFILESIZE lines in $dst"
+}
+
+# late_lines <rc> - lines *after* the include block that change PATH or
+# PROMPT_COMMAND, or load SDKMAN/nvm/cargo. Tools they add to PATH aren't seen
+# by the alias checks, a PROMPT_COMMAND assignment drops zoxide's hook, and
+# SDKMAN lines load it a second time. Printed in the summary as a hint.
+late_lines() {
+  [ -f "$1" ] || return 0
+  awk -v e="$BLOCK_END" '
+    after && /(^|[^A-Za-z_])(PATH|PROMPT_COMMAND)=|sdkman-init|cargo\/env|nvm\.sh/ { print "      " $0 }
+    $0 == e { after = 1 }' "$1"
 }
 
 # --- Aliases file ------------------------------------------------------------
@@ -360,9 +476,13 @@ link_aliases() {
     case "$target" in
       */shell/aliases.sh)
         # Our link from an old checkout location: point it at this one.
-        ln -sfn "$src" "$dst"
-        info "Re-linked $dst -> $src (was $target)"
-        ALIAS_STATUS="relinked"
+        if ln -sfn "$src" "$dst" 2>/dev/null; then
+          info "Re-linked $dst -> $src (was $target)"
+          ALIAS_STATUS="relinked"
+        else
+          warn "Couldn't re-link $dst to $src."
+          ALIAS_STATUS="failed"
+        fi
         return ;;
     esac
   fi
@@ -371,8 +491,67 @@ link_aliases() {
     ALIAS_STATUS="kept"
     return
   fi
-  ln -s "$src" "$dst"
-  info "Linked $dst -> $src"
+  if ln -s "$src" "$dst" 2>/dev/null; then
+    info "Linked $dst -> $src"
+  else
+    warn "Couldn't create $dst; the repo aliases still load from shell/aliases.sh."
+    ALIAS_STATUS="failed"
+  fi
+}
+
+# --- Emacs config ------------------------------------------------------------
+# Link ~/.config/emacs (or $XDG_CONFIG_HOME/emacs) to emacs/ in this repo.
+# Emacs loads ~/.emacs or ~/.emacs.d in preference to ~/.config/emacs, so if
+# either exists the link would be ignored: then, or when ~/.config/emacs is
+# already your own, nothing is changed.
+# Records EMACS_LINK / EMACS_STATUS for the summary.
+link_emacs() {
+  src="$DOTFILES_DIR/emacs"
+  dst="${XDG_CONFIG_HOME:-$HOME/.config}/emacs"
+  EMACS_LINK="$dst"; EMACS_STATUS="linked"
+
+  for old in "$HOME/.emacs" "$HOME/.emacs.el" "$HOME/.emacs.d"; do
+    if [ -e "$old" ] || [ -L "$old" ]; then
+      info "Kept your existing $old; Emacs loads it instead of $dst."
+      EMACS_LINK="$old"; EMACS_STATUS="shadowed"
+      return
+    fi
+  done
+
+  if [ -L "$dst" ]; then
+    target="$(readlink "$dst")"
+    if [ "$target" = "$src" ]; then
+      info "Emacs config already linked: $dst"
+      EMACS_STATUS="already"
+      return
+    fi
+    # Our link from an old checkout location (since moved, or another checkout
+    # of this repo): point it at this one.
+    case "$target" in
+      */emacs)
+        if [ ! -e "$target" ] || [ -f "$target/../install.sh" ]; then
+          if ln -sfn "$src" "$dst" 2>/dev/null; then
+            info "Re-linked $dst -> $src (was $target)"
+            EMACS_STATUS="relinked"
+          else
+            warn "Couldn't re-link $dst to $src."
+            EMACS_STATUS="failed"
+          fi
+          return
+        fi ;;
+    esac
+  fi
+  if [ -e "$dst" ] || [ -L "$dst" ]; then
+    info "Kept your existing $dst."
+    EMACS_STATUS="kept"
+    return
+  fi
+  if mkdir -p "$(dirname "$dst")" && ln -s "$src" "$dst" 2>/dev/null; then
+    info "Linked $dst -> $src"
+  else
+    warn "Couldn't create $dst."
+    EMACS_STATUS="failed"
+  fi
 }
 
 # --- Wire up the shell configuration -----------------------------------------
@@ -380,38 +559,68 @@ if [ "$DO_LINK" -eq 1 ]; then
   info "Configuring shell startup files (existing files are backed up, not replaced)..."
 
   # Configure the native shell for this platform: bash on Debian, zsh on macOS.
+  HIST_STATUS="none"
   case "$OS" in
     macos)  include_config "$DOTFILES_DIR/zsh/zshrc"   "$HOME/.zshrc" ;;
-    *)      include_config "$DOTFILES_DIR/bash/bashrc" "$HOME/.bashrc" ;;
+    *)      include_config "$DOTFILES_DIR/bash/bashrc" "$HOME/.bashrc"
+            case "$CFG_STATUS" in
+              appended|updated|already) disable_stock_history "$HOME/.bashrc" ;;
+            esac ;;
   esac
 
   # Put the aliases in their own conventional file.
   link_aliases
 
+  link_emacs
+
   # --- Summary of what changed ---
   printf '\n'
   info "What changed in your shell config:"
   case "$CFG_STATUS" in
-    already) printf '  • %s already had the dotfiles include block — no change.\n' "$CFG_RC" ;;
+    already) printf '  • %s already had the dotfiles include block — no change to it.\n' "$CFG_RC" ;;
     damaged) printf '  • %s was NOT changed: its dotfiles block markers are damaged.\n' "$CFG_RC" ;;
+    skipped) printf '  • %s was NOT changed (see the warning above).\n' "$CFG_RC" ;;
     updated|appended)
       if [ "$CFG_STATUS" = "updated" ]; then
         printf '  • Updated the outdated include block in %s (in place)\n' "$CFG_RC"
       else
         printf '  • Appended a marked include block to %s\n' "$CFG_RC"
       fi
-      printf '    that sources functions, exports and the agnoster theme from this\n'
-      printf '    repo (%s).\n' "$DOTFILES_DIR"
-      printf '  • Backed up the previous %s to %s\n' "$CFG_RC" "$CFG_BACKUP"
-      printf '  • The rest of %s is unchanged (only the marked block was touched).\n' "$CFG_RC"
+      printf "    that loads this repo's shell config (%s).\n" "$DOTFILES_DIR"
       ;;
   esac
+  if [ "$HIST_STATUS" = "disabled" ]; then
+    printf '  • Commented out the stock HISTSIZE=1000 / HISTFILESIZE=2000 lines in %s\n' "$CFG_RC"
+  fi
+  if [ -n "$CFG_BACKUP" ]; then
+    printf '  • Backed up the previous %s to %s\n' "$CFG_RC" "$CFG_BACKUP"
+    printf '  • Nothing else in %s was changed.\n' "$CFG_RC"
+  fi
   case "$ALIAS_STATUS" in
     already)  printf '  • Your aliases file %s already links to the repo — no change.\n' "$ALIAS_LINK" ;;
     kept)     printf '  • Kept your own aliases file %s; it loads after the repo aliases.\n' "$ALIAS_LINK" ;;
     relinked) printf '  • Re-pointed %s at %s\n' "$ALIAS_LINK" "$DOTFILES_DIR/shell/aliases.sh" ;;
     linked)   printf '  • Linked your aliases file %s -> %s\n' "$ALIAS_LINK" "$DOTFILES_DIR/shell/aliases.sh" ;;
+    failed)   printf '  • %s was NOT linked (see the warning above).\n' "$ALIAS_LINK" ;;
   esac
+  case "$EMACS_STATUS" in
+    already)  printf '  • %s already links to the repo Emacs config — no change.\n' "$EMACS_LINK" ;;
+    kept)     printf '  • Kept your own Emacs config in %s.\n' "$EMACS_LINK" ;;
+    shadowed)
+      printf '  • Did not link the Emacs config: Emacs would load your %s instead.\n' "$EMACS_LINK"
+      printf '    Move it aside and re-run ./install.sh --link to use %s.\n' "$DOTFILES_DIR/emacs"
+      ;;
+    relinked) printf '  • Re-pointed %s at %s\n' "$EMACS_LINK" "$DOTFILES_DIR/emacs" ;;
+    linked)   printf '  • Linked your Emacs config %s -> %s\n' "$EMACS_LINK" "$DOTFILES_DIR/emacs" ;;
+    failed)   printf '  • %s was NOT linked (see the warning above).\n' "$EMACS_LINK" ;;
+  esac
+  late="$(late_lines "$CFG_RC")"
+  if [ -n "$late" ]; then
+    printf '  • Note: these lines come after the dotfiles block in %s:\n%s\n' "$CFG_RC" "$late"
+    printf '    Tools they put on PATH are not seen by the alias checks, a PROMPT_COMMAND\n'
+    printf '    assignment drops the zoxide hook, and SDKMAN lines load it a second time.\n'
+    printf '    Consider moving them above the block.\n'
+  fi
   printf '\n'
   info "Reload your shell to see the changes:  exec \"\$SHELL\" -l   (or open a new terminal)"
 else
