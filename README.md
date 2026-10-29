@@ -5,7 +5,8 @@ macOS**, plus a one-shot installer that sets up the same CLI tools on both
 (Homebrew on macOS, apt on Debian).
 
 The idea: aliases, environment variables, and functions live once in
-`shell/` as POSIX-compatible scripts. Both `bash/bashrc` and `zsh/zshrc` source
+`shell/` as scripts that run in both bash and zsh (POSIX sh apart from
+`local` and the `function` keyword in `functions.sh`). Both `bash/bashrc` and `zsh/zshrc` source
 them, so the day-to-day experience is identical regardless of the shell. Each
 of those keeps only the genuinely shell-specific bits (the Oh My Bash/Zsh
 framework + agnoster theme). The installer **appends** them to your existing
@@ -17,7 +18,7 @@ framework + agnoster theme). The installer **appends** them to your existing
 ## What you get
 
 - **Shared shell config** for bash (Debian) and zsh (macOS) — the same aliases,
-  environment, and functions in both, from POSIX scripts under `shell/`.
+  environment, and functions in both, from shared scripts under `shell/`.
 - **Oh My Bash / Oh My Zsh** with the **agnoster** theme and the **JetBrains
   Mono Nerd Font** for the prompt glyphs.
 - **[SDKMAN](https://sdkman.io/)** for managing JVM SDKs (`sdk install …`).
@@ -44,11 +45,14 @@ Tested on **Debian 13 (trixie)** and **macOS**. A leaner subset is available via
 │   ├── brew.txt          # the same CLI tools for macOS (Homebrew)
 │   ├── apt-minimal.txt   # lean subset for `install.sh --minimal`
 │   └── brew-minimal.txt  # …and its Homebrew counterpart
-├── shell/                # shared, POSIX-compatible config
+├── shell/                # shared bash/zsh config
 │   ├── common.sh         #   entry point sourced by both shells
 │   ├── exports.sh        #   environment variables (EDITOR, PATH, history…)
 │   ├── aliases.sh        #   aliases — linked to ~/.bash_aliases / ~/.zsh_aliases
 │   └── functions.sh      #   functions (mkcd, extract, fzf helpers…)
+├── tests/
+│   ├── bash-test.sh      # install.sh --link + interactive bash, in temp HOMEs
+│   └── zsh-test.zsh      # loads the shared config in zsh
 ├── bash/
 │   └── bashrc            # Oh My Bash (agnoster) + sources shell/common.sh
 └── zsh/
@@ -67,7 +71,8 @@ The installer:
 
 1. Detects the OS (macOS vs Debian).
 2. Installs the packages from `packages/brew.txt` or `packages/apt.txt`
-   (installing Homebrew first on macOS if needed).
+   (installing Homebrew first on macOS if needed; on Debian it uses `sudo`
+   unless you're already root).
 3. Installs [SDKMAN](https://sdkman.io/) (JVM SDK manager) via its own script
    if it isn't already present, telling it not to edit your rc files. It's
    wired up for both shells in `shell/common.sh`.
@@ -82,13 +87,16 @@ The installer:
    platform's native shell (`~/.bashrc` on Debian, `~/.zshrc` on macOS) it backs
    up the file (timestamped copy) and appends a small managed include block that
    sources this repo's `bash/bashrc` / `zsh/zshrc`. Your original settings stay
-   in place above the block.
+   in place above the block. If your rc file already loads Oh My Bash/Zsh or
+   SDKMAN itself, they aren't loaded a second time.
 7. **Links your aliases file to the conventional name** — `~/.bash_aliases` on
-   Debian or `~/.zsh_aliases` on macOS — both pointing at `shell/aliases.sh`.
-   `shell/common.sh` sources it after Oh My Bash/Zsh, so your aliases win over
-   the framework's. Any existing file there is backed up first. Edit your
-   aliases at that path or in the repo; it's the same file.
-8. **Prints a summary** of exactly what it changed (and where it put backups).
+   Debian or `~/.zsh_aliases` on macOS — pointing at `shell/aliases.sh`, so you
+   can edit the aliases at that path or in the repo (it's the same file). If you
+   already have your own file there, it's **kept**: `shell/common.sh` loads it
+   right after the repo's aliases, so yours take precedence. Either way the
+   aliases load after Oh My Bash/Zsh, so they win over the framework's.
+8. **Prints a summary** of exactly what it changed (and where it put backups),
+   and ends with a warning count if any step failed.
 
 When it finishes, **reload your shell** to pick up the changes:
 
@@ -121,7 +129,13 @@ throwaway boxes where you just want the essentials.
 
 It is safe to re-run; the include block is added only once and backups are
 timestamped. If you move the checkout, re-run `./install.sh --link` from the new
-location and the include block is updated to point there.
+location and the include block is updated in place to point there. If the
+block's marker lines have been edited or deleted, the installer leaves the rc
+file alone and asks you to fix it by hand. The checkout path can't contain
+`"`, `$`, backtick or backslash characters (it's written into your rc file).
+
+`dothelp` only lists what's actually installed, so after `--minimal` it hides the
+fd- and zoxide-based helpers.
 
 ## Cheat-sheet
 
@@ -134,9 +148,15 @@ handy when you forget what's available.
 - **Add a CLI tool to both platforms:** add it to `packages/apt.txt` *and*
   `packages/brew.txt` (mind the name differences — see below).
 - **Add an alias:** edit `shell/aliases.sh` (a.k.a. `~/.bash_aliases` /
-  `~/.zsh_aliases` — it's symlinked). Applies to both shells.
-- **Add a function or export:** edit `shell/functions.sh` / `shell/exports.sh`.
-  Applies to both shells automatically.
+  `~/.zsh_aliases` when the installer symlinked it). Applies to both shells.
+  If you kept your own aliases file, add personal ones there instead.
+- **Add a function:** edit `shell/functions.sh`, defining it as
+  `function name { … }` (not `name() { … }`, which breaks if an alias of the
+  same name exists) and using `command`/`builtin` for commands that might be
+  aliased (`command mkdir`, `builtin cd`).
+- **Add an export:** edit `shell/exports.sh`. Applies to both shells.
+  `EDITOR`/`VISUAL`, `LESS` and `LANG` are only set if your rc file hasn't
+  set them already.
 - **Machine-specific or secret settings:** put them in `~/.shell.local`. It's
   sourced at the end of `shell/common.sh` and is not tracked by git.
 
@@ -156,5 +176,14 @@ the binary-name differences:
 24.04. The installer runs a single `apt-get install` for the whole list, so on an
 older release where one of these is missing apt installs **none** of them — drop
 the unavailable packages from `packages/apt.txt` (or upgrade the release) and
-re-run. The `ls`/`ll`/`la` aliases fall back to coloured `ls` when `eza` is
-absent, so missing it isn't fatal to day-to-day use.
+re-run. The `ls`/`ll`/`la` aliases fall back to coloured `ls` (and `lt` to
+`tree`) when `eza` is absent, so missing it isn't fatal to day-to-day use.
+
+## Tests
+
+`./tests/bash-test.sh` runs `install.sh --link` in throwaway home directories
+(fresh install, re-run, moved checkout, damaged markers, your own aliases file)
+and checks an interactive bash on top of the stock `~/.bashrc`. It never installs
+packages or touches your real home directory. `zsh tests/zsh-test.zsh` loads the
+shared config in zsh. CI runs both, plus shellcheck and syntax checks, on every
+pull request.

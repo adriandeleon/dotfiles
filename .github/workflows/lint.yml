@@ -1,8 +1,14 @@
 name: lint
 
+# Pull requests are checked on their own; pushes only on main, so a PR branch
+# isn't checked twice.
 on:
   push:
+    branches: [main]
   pull_request:
+
+permissions:
+  contents: read
 
 jobs:
   lint:
@@ -14,13 +20,13 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y zsh
 
       - name: shellcheck
-        run: shellcheck --severity=warning install.sh shell/*.sh bash/bashrc
+        run: shellcheck --severity=warning install.sh shell/*.sh bash/bashrc tests/bash-test.sh
 
       # The syntax steps check every file and name each one that fails.
       - name: bash syntax
         run: |
           status=0
-          for f in install.sh shell/*.sh bash/bashrc; do
+          for f in install.sh shell/*.sh bash/bashrc tests/bash-test.sh; do
             bash -n "$f" || { echo "::error file=$f::bash -n failed (exit $?)"; status=1; }
           done
           exit "$status"
@@ -29,21 +35,17 @@ jobs:
         run: |
           zsh --version
           status=0
-          for f in shell/*.sh zsh/zshrc; do
+          for f in shell/*.sh zsh/zshrc tests/zsh-test.zsh; do
             zsh -n "$f" || { echo "::error file=$f::zsh -n failed (exit $?)"; status=1; }
           done
           exit "$status"
 
-      # Loads the shared config in zsh and checks `up` leaves $PATH alone
-      # (zsh ties the `path` variable to $PATH).
-      - name: zsh smoke test
+      # install.sh --link in throwaway HOMEs, plus an interactive bash on top of
+      # the stock ~/.bashrc. Never installs packages.
+      - name: install + bash tests
         if: ${{ !cancelled() }}
-        run: |
-          zsh -c '
-            DOTFILES=$PWD
-            . shell/common.sh
-            before=$PATH
-            cd /tmp && up 1 || { echo "up failed"; exit 1; }
-            [ "$PATH" = "$before" ] || { echo "up changed PATH to: $PATH"; exit 1; }
-            dothelp >/dev/null || { echo "dothelp failed"; exit 1; }
-          '
+        run: ./tests/bash-test.sh
+
+      - name: zsh tests
+        if: ${{ !cancelled() }}
+        run: zsh tests/zsh-test.zsh

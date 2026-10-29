@@ -12,7 +12,8 @@ case $- in
   *) return ;;
 esac
 
-# Location of the dotfiles checkout (override in ~/.shell.local if needed).
+# Location of the dotfiles checkout. The include block install.sh adds to your
+# ~/.bashrc sets it; after moving the checkout, re-run `./install.sh --link`.
 export DOTFILES="${DOTFILES:-$HOME/.dotfiles}"
 
 # --- Bash-specific options ---------------------------------------------------
@@ -25,17 +26,21 @@ HISTCONTROL=ignoreboth    # no duplicate lines or lines starting with space
 # Framework lives in ~/.oh-my-bash (cloned by install.sh). It owns the prompt
 # (agnoster theme) and completion.
 #
-# Your aliases live in ~/.bash_aliases (a symlink to shell/aliases.sh, set up
-# by install.sh). We load no alias/plugin modules here, but Oh My Bash's core
-# still defines a few (ll, la...), so shell/common.sh re-sources your aliases
-# file *after* this block to make sure yours win. Completion only.
-export OSH="$HOME/.oh-my-bash"
-OSH_THEME="agnoster"                 # needs a Powerline/Nerd font to render
-DISABLE_AUTO_UPDATE="true"
-completions=(git ssh)
-aliases=()
-plugins=()
-[ -r "$OSH/oh-my-bash.sh" ] && source "$OSH/oh-my-bash.sh"
+# We load no alias/plugin modules here, but Oh My Bash's core still defines a
+# few (ll, la, cd...), so shell/common.sh loads our aliases *after* this block
+# to make sure ours win. Completion only.
+#
+# If your own ~/.bashrc already loaded Oh My Bash (OMB_VERSION is set), it is
+# not loaded a second time and your theme/plugin settings are kept.
+if [ -z "${OMB_VERSION:-}" ] && [ -r "$HOME/.oh-my-bash/oh-my-bash.sh" ]; then
+  export OSH="$HOME/.oh-my-bash"
+  OSH_THEME="agnoster"                 # needs a Powerline/Nerd font to render
+  DISABLE_AUTO_UPDATE="true"
+  completions=(git ssh)
+  aliases=()
+  plugins=()
+  source "$OSH/oh-my-bash.sh"
+fi
 
 # --- Shared configuration (aliases, exports, functions, tooling) -------------
-[ -r "$DOTFILES/shell/common.sh" ] && . "$DOTFILES/shell/common.sh"
+if [ -r "$DOTFILES/shell/common.sh" ]; then . "$DOTFILES/shell/common.sh"; fi
