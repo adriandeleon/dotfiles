@@ -10,8 +10,9 @@ if command -v eza >/dev/null 2>&1; then
   alias la='eza --icons -a --group-directories-first'
   alias lt='eza --icons --tree --level=2'
 else
-  # macOS ls uses -G for colour; GNU ls uses --color=auto
-  if ls --color=auto >/dev/null 2>&1; then
+  # macOS ls uses -G for colour; GNU ls uses --color=auto. `command` makes the
+  # probe use the real ls binary, never an alias.
+  if command ls --color=auto >/dev/null 2>&1; then
     alias ls='ls --color=auto'
   else
     alias ls='ls -G'
