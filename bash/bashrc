@@ -2,6 +2,10 @@
 # Sourced from your existing ~/.bashrc by an include block that install.sh
 # appends (your original file is backed up, never replaced).
 
+# The OSH_* / completions / aliases / plugins variables below are read by
+# oh-my-bash.sh, not by this file.
+# shellcheck disable=SC2034
+
 # If not running interactively, don't do anything.
 case $- in
   *i*) ;;
@@ -22,9 +26,9 @@ HISTCONTROL=ignoreboth    # no duplicate lines or lines starting with space
 # (agnoster theme) and completion.
 #
 # Your aliases live in ~/.bash_aliases (a symlink to shell/aliases.sh, set up
-# by install.sh), which Debian's stock ~/.bashrc sources *before* this block.
-# So we deliberately load NO alias/plugin modules here - otherwise Oh My Bash
-# would redefine ll/la/git aliases and clobber yours. Completion only.
+# by install.sh). We load no alias/plugin modules here, but Oh My Bash's core
+# still defines a few (ll, la...), so shell/common.sh re-sources your aliases
+# file *after* this block to make sure yours win. Completion only.
 export OSH="$HOME/.oh-my-bash"
 OSH_THEME="agnoster"                 # needs a Powerline/Nerd font to render
 DISABLE_AUTO_UPDATE="true"

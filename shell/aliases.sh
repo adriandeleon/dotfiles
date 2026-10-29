@@ -27,14 +27,18 @@ command -v fdfind  >/dev/null 2>&1 && ! command -v fd  >/dev/null 2>&1 && alias 
 command -v batcat  >/dev/null 2>&1 && ! command -v bat >/dev/null 2>&1 && alias bat='batcat'
 
 # --- Editors -----------------------------------------------------------------
-alias vi='nvim'
-alias vim='nvim'
-alias ovim='/usr/bin/vim'          # the original vim, bypassing the nvim alias
+# Only redirect vi/vim when neovim is actually installed (the --minimal
+# package sets don't include it).
+if command -v nvim >/dev/null 2>&1; then
+  alias vi='nvim'
+  alias vim='nvim'
+fi
+alias ovim='command vim'           # the original vim, bypassing the nvim alias
 alias ec='emacsclient'
 
 # editora: personal editor wrapper and its variants.
 alias edi='editora --single-window'
-alias edis='editora --simple-ui --single-window'
+alias edis='editora --simple --single-window'
 alias ediz='editora --zen --single-window'
 alias edie='editora --expert --single-window'
 alias edif='editoraf'

@@ -1,0 +1,5 @@
+# shellcheck settings for this repo (used locally and by .github/workflows/lint.yml).
+# The shell/ files have no shebang; they are written for bash and zsh.
+shell=bash
+# Config files are sourced from paths built at runtime ($DOTFILES, $HOME...).
+disable=SC1090,SC1091

@@ -1,0 +1,29 @@
+name: lint
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install zsh
+        run: sudo apt-get update && sudo apt-get install -y zsh
+
+      - name: shellcheck
+        run: shellcheck --severity=warning install.sh shell/*.sh bash/bashrc
+
+      - name: bash syntax
+        run: for f in install.sh shell/*.sh bash/bashrc; do bash -n "$f"; done
+
+      - name: zsh syntax
+        run: for f in shell/*.sh zsh/zshrc; do zsh -n "$f"; done
+
+      # Loads the shared config in zsh and checks `up` leaves $PATH alone
+      # (zsh ties the `path` variable to $PATH).
+      - name: zsh smoke test
+        run: |
+          zsh -c 'DOTFILES=$PWD; . shell/common.sh; before=$PATH; cd /tmp && up 1 && [ "$PATH" = "$before" ] && dothelp >/dev/null'
