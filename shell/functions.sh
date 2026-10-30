@@ -8,9 +8,10 @@
 # `function` keyword form is never alias-expanded.
 #
 # Aliases that exist when a function is *defined* are expanded inside its body.
-# In bash, Debian's stock ~/.bashrc and Oh My Bash define aliases before this
-# file loads (e.g. `alias cd=_omb_directories_cd`, our `mkdir -p`), so bodies
-# use `builtin cd` / `command mkdir` etc. to get the plain commands.
+# Our own aliases load after this file, but Oh My Bash/Zsh and your own rc file
+# or aliases file can define some before it (e.g. Oh My Bash's
+# `alias cd=_omb_directories_cd`), so bodies use `builtin cd` /
+# `command mkdir` etc. to get the plain commands.
 
 # Make a directory and cd into it.
 function mkcd {
@@ -109,11 +110,16 @@ function gb {
 
 
 # --- fzf helpers -------------------------------------------------------------
-# Whether an alias reaches a function body depends on load order, which differs
-# between bash and zsh here, so resolve the real binary names explicitly
-# (Debian ships fdfind/batcat; macOS/Homebrew ship fd/bat).
-command -v fdfind >/dev/null 2>&1 && _FD=fdfind || _FD=fd
-command -v batcat >/dev/null 2>&1 && _BAT=batcat || _BAT=bat
+# Debian ships fd/bat as fdfind/batcat; macOS/Homebrew as fd/bat. The helpers
+# don't use the fd/bat aliases (aliases.sh loads after this file); they look
+# the real name up each time they run, so installing one later just works.
+function _dotfiles_bin { # _dotfiles_bin fd|bat - print the installed binary's name
+  case "$1" in
+    fd)  if command -v fdfind >/dev/null 2>&1; then echo fdfind; else echo fd; fi ;;
+    bat) if command -v batcat >/dev/null 2>&1; then echo batcat; else echo bat; fi ;;
+    *)   echo "$1" ;;
+  esac
+}
 
 # Fuzzy-search the whole shell history. zsh's plain `history` only lists the
 # last 16 events (Oh My Zsh wraps it), so ask `fc` for everything there.
@@ -128,13 +134,15 @@ function fh {
 # cd into a directory picked with fzf.
 function cdf {
   local dir
-  dir="$("$_FD" -t d | fzf)" && [ -n "$dir" ] && builtin cd "$dir" || return
+  dir="$("$(_dotfiles_bin fd)" -t d | fzf)" && [ -n "$dir" ] && builtin cd "$dir" || return
 }
 
-# Open an fzf-picked file in the editor ($EDITOR is nvim; see exports.sh).
+# Open an fzf-picked file in $EDITOR (nvim if unset). EDITOR may include
+# arguments (`code --wait`, `emacsclient -t`), so run it through sh like git
+# does.
 function vimf {
   local file
-  file="$(fzf)" && [ -n "$file" ] && "${EDITOR:-nvim}" "$file"
+  file="$(fzf)" && [ -n "$file" ] && sh -c "${EDITOR:-nvim} \"\$1\"" sh "$file"
 }
 
 # editora + fzf: pick a file, open it in the various editora modes.
@@ -144,10 +152,10 @@ function editorafz { local file; file="$(fzf)" && [ -n "$file" ] && editora "$fi
 function editorafe { local file; file="$(fzf)" && [ -n "$file" ] && editora "$file" --single-window --expert; }
 # Find a file with a bat-powered preview pane.
 function fd-fp {
-  "$_FD" -t f | fzf --preview "$_BAT --style=numbers --color=always {}"
+  "$(_dotfiles_bin fd)" -t f | fzf --preview "$(_dotfiles_bin bat) --style=numbers --color=always {}"
 }
 function find-fp {
-  command find . -type f | fzf --preview "$_BAT --style=numbers --color=always {}"
+  command find . -type f | fzf --preview "$(_dotfiles_bin bat) --style=numbers --color=always {}"
 }
 
 # --- Help --------------------------------------------------------------------
@@ -155,15 +163,16 @@ function find-fp {
 # Run `dothelp` (works the same in bash and zsh) to print it any time. Rows for
 # tools that aren't installed (e.g. after `install.sh --minimal`) are hidden.
 
-# Pad the (plain) key to a fixed width, then wrap with colour *outside* the
-# field so the escape bytes don't throw off column alignment. Reads dothelp's
-# local $k / $z (bash and zsh both scope locals dynamically).
-# shellcheck disable=SC2154
-function _dothelp_row { printf '  %s%-19s%s %s\n' "$k" "$1" "$z" "$2"; }
-function _dothelp_has { command -v "$1" >/dev/null 2>&1; }
-
 function dothelp {
-  local h k d z t c tools=""
+  local h k d z t c fd bat tools=""
+  fd="$(_dotfiles_bin fd)"; bat="$(_dotfiles_bin bat)"
+
+  # Helpers, removed again at the end. _dothelp_row pads the (plain) key to a
+  # fixed width, then wraps it with colour *outside* the field so the escape
+  # bytes don't throw off column alignment.
+  function _dothelp_row { printf '  %s%-19s%s %s\n' "$k" "$1" "$z" "$2"; }
+  function _dothelp_has { command -v "$1" >/dev/null 2>&1; }
+
   # Colours, but only when writing to a terminal.
   if [ -t 1 ]; then
     h=$(printf '\033[1;36m'); k=$(printf '\033[1;32m')
@@ -176,10 +185,11 @@ function dothelp {
   printf '%s\n\n' "${d}shared config in \$DOTFILES (${DOTFILES})${z}"
 
   printf '%s\n' "${h}Listing${z}"
+  _dothelp_row "ls" "the real ls, with colour"
   if _dothelp_has eza; then
-    _dothelp_row "ls ll la lt" "eza with icons"
+    _dothelp_row "ll la lt" "eza with icons (long / all / tree)"
   else
-    _dothelp_row "ls ll la" "coloured ls"
+    _dothelp_row "ll la" "ls -lah / ls -A"
     _dothelp_has tree && _dothelp_row "lt" "tree, 2 levels deep"
   fi
 
@@ -219,20 +229,20 @@ function dothelp {
     _dothelp_row "fh"   "fuzzy-search shell history"
     _dothelp_row "ff"   "fuzzy-pick a file (find)"
     _dothelp_row "vimf" "fuzzy-pick a file, open in \$EDITOR"
-    if _dothelp_has "$_FD"; then
+    if _dothelp_has "$fd"; then
       _dothelp_row "fdf"  "fuzzy-pick a file (fd)"
       _dothelp_row "cdf"  "fuzzy-pick a directory and cd"
     fi
-    if _dothelp_has "$_BAT"; then
+    if _dothelp_has "$bat"; then
       _dothelp_row "find-fp" "fuzzy-pick a file with a bat preview"
-      _dothelp_has "$_FD" && _dothelp_row "fd-fp" "...same, listing with fd"
+      _dothelp_has "$fd" && _dothelp_row "fd-fp" "...same, listing with fd"
     fi
   fi
 
   for t in rg fd bat fzf jq tree htop btop ncdu duf mc nmap ncat tmux nvim emacs jed zoxide fastfetch sdk; do
     case "$t" in
-      fd)  c="$_FD" ;;
-      bat) c="$_BAT" ;;
+      fd)  c="$fd" ;;
+      bat) c="$bat" ;;
       *)   c="$t" ;;
     esac
     _dothelp_has "$c" && tools="$tools $t"
@@ -243,4 +253,5 @@ function dothelp {
   fi
 
   printf '\n%s\n' "${d}Add your own machine-only tweaks in ~/.shell.local${z}"
+  unset -f _dothelp_row _dothelp_has
 }

@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  lint:
+  linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -40,12 +40,35 @@ jobs:
           done
           exit "$status"
 
-      # install.sh --link in throwaway HOMEs, plus an interactive bash on top of
-      # the stock ~/.bashrc. Never installs packages.
+      # The real frameworks, so the load-order checks run against them too.
+      - name: Fetch Oh My Bash / Oh My Zsh
+        if: ${{ !cancelled() }}
+        run: |
+          git clone --depth=1 https://github.com/ohmybash/oh-my-bash.git "$RUNNER_TEMP/oh-my-bash"
+          git clone --depth=1 https://github.com/ohmyzsh/ohmyzsh.git "$RUNNER_TEMP/oh-my-zsh"
+
+      # install.sh --link in throwaway HOMEs, plus interactive bash sessions on
+      # top of the stock ~/.bashrc. Never installs packages.
       - name: install + bash tests
         if: ${{ !cancelled() }}
-        run: ./tests/bash-test.sh
+        run: OMB_SRC="$RUNNER_TEMP/oh-my-bash" ./tests/bash-test.sh
 
       - name: zsh tests
         if: ${{ !cancelled() }}
-        run: zsh tests/zsh-test.zsh
+        run: OMZ_SRC="$RUNNER_TEMP/oh-my-zsh" zsh tests/zsh-test.zsh
+
+  # macOS: install.sh under the system /bin/bash 3.2 with BSD awk/sed/readlink,
+  # writing ~/.zshrc, then zsh sessions with and without the real Oh My Zsh.
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: install.sh syntax under /bin/bash 3.2
+        run: /bin/bash --version | head -1 && /bin/bash -n install.sh
+
+      - name: Fetch Oh My Zsh
+        run: git clone --depth=1 https://github.com/ohmyzsh/ohmyzsh.git "$RUNNER_TEMP/oh-my-zsh"
+
+      - name: install + zsh tests
+        run: OMZ_SRC="$RUNNER_TEMP/oh-my-zsh" zsh tests/zsh-test.zsh

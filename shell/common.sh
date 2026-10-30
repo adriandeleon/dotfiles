@@ -12,10 +12,10 @@
 : "${DOTFILES:=$HOME/.dotfiles}"
 DOTFILES_SHELL="$DOTFILES/shell"
 
-for part in exports functions; do
-  if [ -r "$DOTFILES_SHELL/$part.sh" ]; then . "$DOTFILES_SHELL/$part.sh"; fi
+for _dotfiles_part in exports functions; do
+  if [ -r "$DOTFILES_SHELL/$_dotfiles_part.sh" ]; then . "$DOTFILES_SHELL/$_dotfiles_part.sh"; fi
 done
-unset part
+unset _dotfiles_part
 
 # --- Shared interactive tooling ---------------------------------------------
 # Detect current shell name for tools that need shell-specific init.
@@ -35,13 +35,13 @@ if command -v fzf >/dev/null 2>&1; then
   else
     # Fall back to files installed by the distro/Homebrew package.
     # HOMEBREW_PREFIX is set by `brew shellenv` in exports.sh.
-    for f in \
+    for _dotfiles_f in \
       "/usr/share/doc/fzf/examples/key-bindings.$_dotfiles_shell" \
       "/usr/share/fzf/key-bindings.$_dotfiles_shell" \
       "${HOMEBREW_PREFIX:+$HOMEBREW_PREFIX/opt/fzf/shell/key-bindings.$_dotfiles_shell}"; do
-      if [ -r "$f" ]; then . "$f"; fi
+      if [ -r "$_dotfiles_f" ]; then . "$_dotfiles_f"; fi
     done
-    unset f
+    unset _dotfiles_f
   fi
   unset _fzf_init
 fi
@@ -49,26 +49,31 @@ fi
 unset _dotfiles_shell
 
 # SDKMAN - JVM SDK manager (java, gradle, maven...). Its init script supports
-# both bash and zsh. Skip it if your own rc file already loaded it (`sdk`
-# exists), so it isn't initialised twice.
-export SDKMAN_DIR="${SDKMAN_DIR:-$HOME/.sdkman}"
+# both bash and zsh. Skip it if your rc file already loaded it *above* the
+# include block (`sdk` exists), so it isn't initialised twice. (SDKMAN lines
+# below the block still run again afterwards; see the README.)
 if command -v sdk >/dev/null 2>&1; then
   :
-elif [ -s "$SDKMAN_DIR/bin/sdkman-init.sh" ]; then
+elif [ -s "${SDKMAN_DIR:-$HOME/.sdkman}/bin/sdkman-init.sh" ]; then
+  export SDKMAN_DIR="${SDKMAN_DIR:-$HOME/.sdkman}"
   . "$SDKMAN_DIR/bin/sdkman-init.sh"
 fi
 
 # --- Aliases -----------------------------------------------------------------
-# Loaded after everything above, so our aliases (ls -> eza, du -> du -h...)
-# can't be baked into the functions that zoxide, fzf and SDKMAN define. They
-# also come after Oh My Bash/Zsh, so they win over the framework's.
+# Loaded after everything above, so our aliases (du -> du -h, mkdir -> mkdir
+# -p...) can't be baked into the functions that zoxide, fzf, SDKMAN and Oh My
+# Bash/Zsh define, and so ours win over the framework's. aliases.sh does
+# nothing unless _DOTFILES_LOADING_ALIASES is set, which makes the early copy
+# that Debian's stock ~/.bashrc sources (via ~/.bash_aliases) a no-op.
 #
 # Then your personal aliases file, if you have one: ~/.bash_aliases (bash) or
 # ~/.zsh_aliases (zsh). install.sh links that name to shell/aliases.sh only when
 # it doesn't exist yet; if it's your own file, it's loaded here after ours so
-# your aliases take precedence. (In bash, Debian's stock ~/.bashrc has already
-# sourced ~/.bash_aliases once, before Oh My Bash - this re-applies it.)
+# your aliases take precedence. (In bash, the stock ~/.bashrc has already
+# sourced your file once, before Oh My Bash - this re-applies it.)
+_DOTFILES_LOADING_ALIASES=1
 if [ -r "$DOTFILES_SHELL/aliases.sh" ]; then . "$DOTFILES_SHELL/aliases.sh"; fi
+unset _DOTFILES_LOADING_ALIASES
 if [ -n "${ZSH_VERSION:-}" ]; then
   _dotfiles_aliases="$HOME/.zsh_aliases"
 else
@@ -80,5 +85,8 @@ fi
 unset _dotfiles_aliases DOTFILES_SHELL
 
 # --- Local, machine-specific overrides --------------------------------------
-# Not tracked in git - put secrets / per-host tweaks here.
+# Not tracked in git - put secrets / per-host tweaks here. It runs last, so it
+# can override anything above; to add to PROMPT_COMMAND (or anything else the
+# tools above hook into), append to it rather than replacing it, or zoxide
+# stops recording directories.
 if [ -r "$HOME/.shell.local" ]; then . "$HOME/.shell.local"; fi
