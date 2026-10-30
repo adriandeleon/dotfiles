@@ -30,6 +30,8 @@ framework + agnoster theme). The installer **appends** them to your existing
   - *other:* git, jq, zoxide (`z`), plus build/archive basics
 - Handy **aliases, functions, and fzf helpers**, discoverable any time with
   **`dothelp`**.
+- An **Emacs 31 config** in `emacs/`, linked to `~/.config/emacs`: tree-sitter
+  modes, Eglot, Vertico/Consult/Corfu completion and Magit (see [Emacs](#emacs)).
 
 Tested on **Debian 13 (trixie)** and **macOS**. A leaner subset is available via
 `./install.sh --minimal` (see [Install](#install)).
@@ -50,6 +52,9 @@ Tested on **Debian 13 (trixie)** and **macOS**. A leaner subset is available via
 │   ├── exports.sh        #   environment variables (EDITOR, PATH, history…)
 │   ├── aliases.sh        #   aliases — linked to ~/.bash_aliases / ~/.zsh_aliases
 │   └── functions.sh      #   functions (mkcd, extract, fzf helpers…)
+├── emacs/                # Emacs 31 config — linked to ~/.config/emacs
+│   ├── early-init.el     #   runs before the first frame (UI, GC)
+│   └── init.el           #   everything else
 ├── tests/
 │   ├── bash-test.sh      # install.sh --link + interactive bash, in temp HOMEs
 │   └── zsh-test.zsh      # loads the shared config in zsh
@@ -102,7 +107,12 @@ The installer:
    already have your own file there, it's **kept**: `shell/common.sh` loads it
    right after the repo's aliases, so yours take precedence. Either way the
    aliases load after Oh My Bash/Zsh, so they win over the framework's.
-8. **Prints a summary** of exactly what it changed (and where it put backups),
+8. **Links `~/.config/emacs` to `emacs/`** (or `$XDG_CONFIG_HOME/emacs`). If
+   you already have an Emacs config — `~/.emacs`, `~/.emacs.d` or your own
+   `~/.config/emacs` — it's **kept** and nothing is linked (Emacs loads
+   `~/.emacs` / `~/.emacs.d` first anyway; move yours aside and re-run
+   `./install.sh --link` to switch).
+9. **Prints a summary** of exactly what it changed (and where it put backups),
    and ends with a warning count if any step failed. It also points out lines
    *after* the block that change `PATH` or `PROMPT_COMMAND` or load SDKMAN, nvm
    or cargo (later installers often append those): tools they add aren't seen
@@ -154,6 +164,46 @@ Once installed, run **`dothelp`** in any bash or zsh session to print a grouped
 summary of the aliases, functions, fzf helpers, and tools this setup adds —
 handy when you forget what's available.
 
+## Emacs
+
+`emacs/` is a config for **Emacs 31.1**. It uses options that don't exist in
+Emacs 30, which is what Debian 13's apt installs, so build or install 31
+yourself. It works in GUI frames, terminal frames and under the daemon.
+
+- Standard Emacs keys, the built-in **modus-vivendi** theme, and JetBrains Mono
+  Nerd Font in GUI frames.
+- **Vertico**, **Orderless**, **Marginalia** and **Consult** in the minibuffer;
+  **Corfu** for completion at point — in terminal frames too, through Emacs
+  31's TTY child frames.
+- **Tree-sitter** modes for every language that has one. A missing grammar is
+  built on first use, after asking (`treesit-auto-install-grammar`).
+  `astro-ts-mode` handles `.astro` files and the built-in `markdown-ts-mode`
+  handles `.md`.
+- **Eglot** starts automatically for Java, TypeScript/JavaScript, Astro, JSON,
+  YAML, Bash, Python and Dockerfiles.
+- **Magit** on `C-x g`, code folding with fringe indicators, and
+  `vc-auto-revert-mode` (buffers follow branch switches).
+
+The first start downloads the packages from GNU ELPA, NonGNU ELPA and MELPA.
+Everything Emacs writes at runtime (packages, grammars, history, `custom.el`,
+backups) also lands in `emacs/`, and `emacs/.gitignore` keeps it out of git.
+
+**Language servers** are installed outside Emacs: the npm ones
+(`typescript-language-server`, `@astrojs/language-server`,
+`vscode-langservers-extracted`, …) and **jdtls** for Java, which has to be on
+your `PATH` (until it is, Eglot warns when you open a Java file). A daemon
+started by systemd never reads your shell rc file, so the config itself adds
+nvm's newest Node, SDKMAN's `current` candidates and `~/.local/bin` to Emacs's
+`PATH`, and sets `JAVA_HOME` from SDKMAN.
+
+**As a daemon:** a source build of Emacs installs a systemd user unit, so
+
+```sh
+systemctl --user enable --now emacs
+```
+
+then open frames with `emacsclient -c` (GUI) or `emacsclient -t` (terminal).
+
 ## Customizing
 
 - **Add a CLI tool to both platforms:** add it to `packages/apt.txt` *and*
@@ -176,6 +226,10 @@ handy when you forget what's available.
   include block, and Oh My Bash/Zsh won't be loaded.
 - **Don't symlink `~/.bashrc` / `~/.zshrc` to the files in this repo** (e.g.
   with GNU stow): the include block is what loads them.
+- **Change the Emacs config:** edit `emacs/init.el`. Lisp files of your own can
+  go in `emacs/user-lisp/`: Emacs 31 byte-compiles them and adds them to
+  `load-path` at startup. Settings made with `M-x customize` go to
+  `emacs/custom.el`, which isn't tracked.
 
 ### Package name differences
 
@@ -199,10 +253,11 @@ colour); `ll`/`la`/`lt` use eza when it's installed and fall back to `ls` (and
 ## Tests
 
 `./tests/bash-test.sh` runs `install.sh --link` in throwaway home directories
-(fresh install, re-run, moved checkout, damaged markers, your own aliases file,
-a symlinked / read-only / dangling rc file) and checks interactive bash
-sessions on top of the stock `~/.bashrc`, with a stand-in framework that defines
-clashing aliases. `zsh tests/zsh-test.zsh` does the same for zsh (on macOS it
+(fresh install, re-run, moved checkout, damaged markers, your own aliases file
+or Emacs config, a symlinked / read-only / dangling rc file) and checks
+interactive bash sessions on top of the stock `~/.bashrc`, with a stand-in
+framework that defines clashing aliases. `zsh tests/zsh-test.zsh` does the
+same for zsh (on macOS it
 runs `install.sh` under the system `/bin/bash`). Both run every shell under
 `env -i` with a temp `HOME`, so they never install packages or touch your real
 home directory. Point `OMB_SRC` / `OMZ_SRC` at an Oh My Bash / Oh My Zsh

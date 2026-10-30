@@ -79,6 +79,7 @@ link "$h"
 check "fresh: block appended once"           [ "$(count "$h/.bashrc" "$BEGIN")" = 1 ]
 check "fresh: ~/.bash_aliases links to repo" [ "$(readlink "$h/.bash_aliases")" = "$REPO/shell/aliases.sh" ]
 check "fresh: ~/.config/emacs links to repo" [ "$(readlink "$h/.config/emacs")" = "$REPO/emacs" ]
+check "fresh: the linked config has init.el" [ -f "$h/.config/emacs/init.el" ]
 if [ -r "$SKEL" ] && grep -qx 'HISTFILESIZE=2000' "$SKEL"; then
   check "fresh: stock HISTFILESIZE=2000 commented out" [ "$(count "$h/.bashrc" 'HISTFILESIZE=2000')" = 0 ]
 fi
