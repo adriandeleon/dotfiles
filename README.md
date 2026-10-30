@@ -72,7 +72,9 @@ The installer:
 1. Detects the OS (macOS vs Debian).
 2. Installs the packages from `packages/brew.txt` or `packages/apt.txt`
    (installing Homebrew first on macOS if needed; on Debian it uses `sudo`
-   unless you're already root).
+   unless you're already root — run the installer itself as yourself, not with
+   `sudo`). If one package isn't available, it retries one package at a time
+   so the rest still install, and lists the ones that failed.
 3. Installs [SDKMAN](https://sdkman.io/) (JVM SDK manager) via its own script
    if it isn't already present, telling it not to edit your rc files. It's
    wired up for both shells in `shell/common.sh`.
@@ -87,8 +89,13 @@ The installer:
    platform's native shell (`~/.bashrc` on Debian, `~/.zshrc` on macOS) it backs
    up the file (timestamped copy) and appends a small managed include block that
    sources this repo's `bash/bashrc` / `zsh/zshrc`. Your original settings stay
-   in place above the block. If your rc file already loads Oh My Bash/Zsh or
-   SDKMAN itself, they aren't loaded a second time.
+   in place above the block. If your rc file already loads Oh My Bash/Zsh — or
+   SDKMAN, *above* the block — they aren't loaded a second time. On Debian it
+   also comments out the stock `HISTSIZE=1000` / `HISTFILESIZE=2000` lines:
+   bash truncates your history file as soon as `HISTFILESIZE` is set, so with
+   them in place the larger limits here could never take effect. It won't add
+   the block to an rc file that is a symlink into this repo (it would load
+   itself); if the rc file isn't writable, it prints the lines to add instead.
 7. **Links your aliases file to the conventional name** — `~/.bash_aliases` on
    Debian or `~/.zsh_aliases` on macOS — pointing at `shell/aliases.sh`, so you
    can edit the aliases at that path or in the repo (it's the same file). If you
@@ -96,7 +103,11 @@ The installer:
    right after the repo's aliases, so yours take precedence. Either way the
    aliases load after Oh My Bash/Zsh, so they win over the framework's.
 8. **Prints a summary** of exactly what it changed (and where it put backups),
-   and ends with a warning count if any step failed.
+   and ends with a warning count if any step failed. It also points out lines
+   *after* the block that change `PATH` or `PROMPT_COMMAND` or load SDKMAN, nvm
+   or cargo (later installers often append those): tools they add aren't seen
+   by the alias checks, and a `PROMPT_COMMAND=` assignment drops zoxide's hook.
+   Move such lines above the block.
 
 When it finishes, **reload your shell** to pick up the changes:
 
@@ -155,10 +166,16 @@ handy when you forget what's available.
   same name exists) and using `command`/`builtin` for commands that might be
   aliased (`command mkdir`, `builtin cd`).
 - **Add an export:** edit `shell/exports.sh`. Applies to both shells.
-  `EDITOR`/`VISUAL`, `LESS` and `LANG` are only set if your rc file hasn't
-  set them already.
+  `EDITOR`, `LESS` and `LANG` are only set if your rc file hasn't set them
+  already; `VISUAL` is never set, so `EDITOR` decides.
 - **Machine-specific or secret settings:** put them in `~/.shell.local`. It's
-  sourced at the end of `shell/common.sh` and is not tracked by git.
+  sourced at the end of `shell/common.sh` (so it can override anything) and is
+  not tracked by git. Add to `PROMPT_COMMAND` there rather than replacing it.
+- **Use a different prompt framework** (starship, bash-it, prezto,
+  powerlevel10k…): put `DOTFILES_NO_FRAMEWORK=1` in your rc file *above* the
+  include block, and Oh My Bash/Zsh won't be loaded.
+- **Don't symlink `~/.bashrc` / `~/.zshrc` to the files in this repo** (e.g.
+  with GNU stow): the include block is what loads them.
 
 ### Package name differences
 
@@ -172,18 +189,23 @@ the binary-name differences:
 | mc   | `midnight-commander` | `mc`      | `mc`             | —                |
 | ncat | (bundled with `nmap`)| `ncat`    | `ncat`           | —                |
 
-`eza`, `btop`, and `fastfetch` are only packaged by apt on Debian 13+/Ubuntu
-24.04. The installer runs a single `apt-get install` for the whole list, so on an
-older release where one of these is missing apt installs **none** of them — drop
-the unavailable packages from `packages/apt.txt` (or upgrade the release) and
-re-run. The `ls`/`ll`/`la` aliases fall back to coloured `ls` (and `lt` to
-`tree`) when `eza` is absent, so missing it isn't fatal to day-to-day use.
+Some packages aren't available on older releases (for example `eza` or
+`fastfetch` on Debian 12 or Ubuntu 24.04). One missing package makes a combined
+`apt-get install` install nothing, so the installer then retries one package at
+a time and lists what it couldn't install. `ls` is always the real `ls` (with
+colour); `ll`/`la`/`lt` use eza when it's installed and fall back to `ls` (and
+`lt` to `tree`) otherwise, so missing it isn't fatal to day-to-day use.
 
 ## Tests
 
 `./tests/bash-test.sh` runs `install.sh --link` in throwaway home directories
-(fresh install, re-run, moved checkout, damaged markers, your own aliases file)
-and checks an interactive bash on top of the stock `~/.bashrc`. It never installs
-packages or touches your real home directory. `zsh tests/zsh-test.zsh` loads the
-shared config in zsh. CI runs both, plus shellcheck and syntax checks, on every
-pull request.
+(fresh install, re-run, moved checkout, damaged markers, your own aliases file,
+a symlinked / read-only / dangling rc file) and checks interactive bash
+sessions on top of the stock `~/.bashrc`, with a stand-in framework that defines
+clashing aliases. `zsh tests/zsh-test.zsh` does the same for zsh (on macOS it
+runs `install.sh` under the system `/bin/bash`). Both run every shell under
+`env -i` with a temp `HOME`, so they never install packages or touch your real
+home directory. Point `OMB_SRC` / `OMZ_SRC` at an Oh My Bash / Oh My Zsh
+checkout to also test against the real frameworks. CI runs both on Linux and
+the zsh/install test on macOS, plus shellcheck and syntax checks, on every pull
+request.
