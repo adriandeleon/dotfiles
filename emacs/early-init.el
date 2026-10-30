@@ -25,7 +25,12 @@
 
 ;; Some packages' autoload files call tree-sitter functions (astro-ts-mode's
 ;; calls `treesit-ready-p'), and those files are loaded when packages are
-;; activated, after this file but before init.el.
+;; activated, after this file but before init.el.  That check warns on every
+;; start until the grammar is installed, so silence tree-sitter warnings until
+;; init.el turns them back on: missing grammars are offered for install when a
+;; file first needs them.  (warnings.el isn't loaded yet; its defcustom keeps
+;; this value.)
 (require 'treesit)
+(setq warning-suppress-log-types '((treesit)))
 
 ;;; early-init.el ends here

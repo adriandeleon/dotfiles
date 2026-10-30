@@ -4,13 +4,15 @@
 ;;
 ;; Written for Emacs 31.1 (it uses options that don't exist in 30).  Works in
 ;; GUI frames, terminal frames and under the daemon (emacsclient), with the
-;; standard Emacs keybindings.  Built-in
-;; features are used wherever they're good enough; a small set of packages
-;; fills the gaps (completion UI, Magit, Astro).  Options that are new in
-;; Emacs 31 are marked "(31)".
+;; standard Emacs keybindings.  Built-in features are used wherever they're
+;; good enough; a small set of packages fills the gaps (completion UI, Magit,
+;; Astro).  Options that are new in Emacs 31 are marked "(31)".
 ;;
 ;; Everything Emacs generates at runtime also lands in this directory, and
 ;; emacs/.gitignore keeps it out of git.
+
+;; early-init.el silenced tree-sitter warnings while packages were activated.
+(setq warning-suppress-log-types (delete '(treesit) warning-suppress-log-types))
 
 ;;; Packages
 
@@ -187,17 +189,24 @@
   :mode "\\.md\\'")
 
 ;; astro-ts-mode refuses to start when a grammar is missing instead of
-;; offering to install it like the built-in modes do, so offer first.
-(defun my/astro-ensure-grammars (&rest _)
-  "Install the grammars `astro-ts-mode' needs, per `treesit-auto-install-grammar'."
-  (require 'astro-ts-mode)              ; registers the astro grammar's source
+;; offering to install it like the built-in modes do, so .astro files go
+;; through this command, which offers first.
+(defun my/astro-ts-mode ()
+  "Install the grammars `astro-ts-mode' needs if missing, then start it.
+Missing grammars are handled per `treesit-auto-install-grammar'."
+  (interactive)
+  ;; Loading the package registers the astro grammar's source, and also warns
+  ;; when the grammar is missing; it's about to be offered, so don't.
+  (let ((warning-suppress-log-types (cons '(treesit) warning-suppress-log-types)))
+    (require 'astro-ts-mode))
   (dolist (lang '(astro css typescript))
-    (treesit-ensure-installed lang)))           ; (31)
+    (treesit-ensure-installed lang))            ; (31)
+  (astro-ts-mode))
 
 (use-package astro-ts-mode
   :ensure t
-  :mode "\\.astro\\'"
-  :init (advice-add 'astro-ts-mode :before #'my/astro-ensure-grammars))
+  :defer t
+  :init (add-to-list 'auto-mode-alist '("\\.astro\\'" . my/astro-ts-mode)))
 
 ;;; Programming
 
