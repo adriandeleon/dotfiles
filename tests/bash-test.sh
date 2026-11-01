@@ -68,7 +68,6 @@ all_functions() {
   missing="$(grep -v '=function$' <<<"$out")"
   [ -n "$out" ] && [ -z "$missing" ] || { printf '       not functions: %s\n' "$missing"; return 1; }
 }
-absent() { [ ! -e "$1" ] && [ ! -L "$1" ]; }
 ours_ll() { grep -Eq "^alias ll='(eza --icons -lah|ls -lah)" <<<"$1"; }
 no_output() { [ -z "$1" ] || { printf '       got: %s\n' "$1"; return 1; }; }
 
@@ -78,8 +77,6 @@ seq 5000 > "$h/.bash_history"
 link "$h"
 check "fresh: block appended once"           [ "$(count "$h/.bashrc" "$BEGIN")" = 1 ]
 check "fresh: ~/.bash_aliases links to repo" [ "$(readlink "$h/.bash_aliases")" = "$REPO/shell/aliases.sh" ]
-check "fresh: ~/.config/emacs links to repo" [ "$(readlink "$h/.config/emacs")" = "$REPO/emacs" ]
-check "fresh: the linked config has init.el" [ -f "$h/.config/emacs/init.el" ]
 if [ -r "$SKEL" ] && grep -qx 'HISTFILESIZE=2000' "$SKEL"; then
   check "fresh: stock HISTFILESIZE=2000 commented out" [ "$(count "$h/.bashrc" 'HISTFILESIZE=2000')" = 0 ]
 fi
@@ -219,30 +216,6 @@ ln -s "$WORK/does-not-exist" "$h/.bashrc"
 link "$h"; status=$?
 check "dangling rc symlink: install exits 0" [ "$status" = 0 ]
 check "dangling rc symlink: warns"           grep -q 'broken symlink' "$h/install.log"
-
-# --- Emacs config link -------------------------------------------------------
-# An existing ~/.emacs.d takes precedence over ~/.config/emacs: don't link.
-h="$(new_home own-emacs-d)"
-mkdir -p "$h/.emacs.d"
-link "$h"
-check "own ~/.emacs.d: no ~/.config/emacs link" absent "$h/.config/emacs"
-check "own ~/.emacs.d: summary says why"     grep -q 'Emacs would load your' "$h/install.log"
-# An existing ~/.config/emacs of your own is kept.
-h="$(new_home own-config-emacs)"
-mkdir -p "$h/.config/emacs" && echo ';; mine' > "$h/.config/emacs/init.el"
-link "$h"
-check "own ~/.config/emacs: not replaced"    [ ! -L "$h/.config/emacs" ]
-check "own ~/.config/emacs: contents kept"   grep -q mine "$h/.config/emacs/init.el"
-# A link left behind by a checkout that has since moved is re-pointed.
-h="$(new_home emacs-moved)"
-mkdir -p "$h/.config" && ln -s "$WORK/old-checkout/emacs" "$h/.config/emacs"
-link "$h"
-check "moved checkout: emacs link re-pointed" [ "$(readlink "$h/.config/emacs")" = "$REPO/emacs" ]
-# Anything else that ~/.config/emacs links to is somebody else's: keep it.
-h="$(new_home emacs-other-link)"
-mkdir -p "$h/elsewhere/emacs" "$h/.config" && ln -s "$h/elsewhere/emacs" "$h/.config/emacs"
-link "$h"
-check "other emacs link: kept"               [ "$(readlink "$h/.config/emacs")" = "$h/elsewhere/emacs" ]
 
 # --- Messages ----------------------------------------------------------------
 h="$(new_home minimal-link)"

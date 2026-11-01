@@ -11,8 +11,6 @@
 #      HISTSIZE=1000 / HISTFILESIZE=2000 lines, which truncate your history.
 #   4. Links ~/.bash_aliases / ~/.zsh_aliases to shell/aliases.sh, unless you
 #      already have your own (that one is kept and still loaded).
-#   5. Links ~/.config/emacs to emacs/, unless you already have an Emacs config
-#      (~/.emacs, ~/.emacs.d or ~/.config/emacs), which is left alone.
 #
 # Safe to re-run: the include block is added only once (and updated in place if
 # the checkout moved); backups are timestamped.
@@ -499,61 +497,6 @@ link_aliases() {
   fi
 }
 
-# --- Emacs config ------------------------------------------------------------
-# Link ~/.config/emacs (or $XDG_CONFIG_HOME/emacs) to emacs/ in this repo.
-# Emacs loads ~/.emacs or ~/.emacs.d in preference to ~/.config/emacs, so if
-# either exists the link would be ignored: then, or when ~/.config/emacs is
-# already your own, nothing is changed.
-# Records EMACS_LINK / EMACS_STATUS for the summary.
-link_emacs() {
-  src="$DOTFILES_DIR/emacs"
-  dst="${XDG_CONFIG_HOME:-$HOME/.config}/emacs"
-  EMACS_LINK="$dst"; EMACS_STATUS="linked"
-
-  for old in "$HOME/.emacs" "$HOME/.emacs.el" "$HOME/.emacs.d"; do
-    if [ -e "$old" ] || [ -L "$old" ]; then
-      info "Kept your existing $old; Emacs loads it instead of $dst."
-      EMACS_LINK="$old"; EMACS_STATUS="shadowed"
-      return
-    fi
-  done
-
-  if [ -L "$dst" ]; then
-    target="$(readlink "$dst")"
-    if [ "$target" = "$src" ]; then
-      info "Emacs config already linked: $dst"
-      EMACS_STATUS="already"
-      return
-    fi
-    # Our link from an old checkout location (since moved, or another checkout
-    # of this repo): point it at this one.
-    case "$target" in
-      */emacs)
-        if [ ! -e "$target" ] || [ -f "$target/../install.sh" ]; then
-          if ln -sfn "$src" "$dst" 2>/dev/null; then
-            info "Re-linked $dst -> $src (was $target)"
-            EMACS_STATUS="relinked"
-          else
-            warn "Couldn't re-link $dst to $src."
-            EMACS_STATUS="failed"
-          fi
-          return
-        fi ;;
-    esac
-  fi
-  if [ -e "$dst" ] || [ -L "$dst" ]; then
-    info "Kept your existing $dst."
-    EMACS_STATUS="kept"
-    return
-  fi
-  if mkdir -p "$(dirname "$dst")" && ln -s "$src" "$dst" 2>/dev/null; then
-    info "Linked $dst -> $src"
-  else
-    warn "Couldn't create $dst."
-    EMACS_STATUS="failed"
-  fi
-}
-
 # --- Wire up the shell configuration -----------------------------------------
 if [ "$DO_LINK" -eq 1 ]; then
   info "Configuring shell startup files (existing files are backed up, not replaced)..."
@@ -570,8 +513,6 @@ if [ "$DO_LINK" -eq 1 ]; then
 
   # Put the aliases in their own conventional file.
   link_aliases
-
-  link_emacs
 
   # --- Summary of what changed ---
   printf '\n'
@@ -602,17 +543,6 @@ if [ "$DO_LINK" -eq 1 ]; then
     relinked) printf '  • Re-pointed %s at %s\n' "$ALIAS_LINK" "$DOTFILES_DIR/shell/aliases.sh" ;;
     linked)   printf '  • Linked your aliases file %s -> %s\n' "$ALIAS_LINK" "$DOTFILES_DIR/shell/aliases.sh" ;;
     failed)   printf '  • %s was NOT linked (see the warning above).\n' "$ALIAS_LINK" ;;
-  esac
-  case "$EMACS_STATUS" in
-    already)  printf '  • %s already links to the repo Emacs config — no change.\n' "$EMACS_LINK" ;;
-    kept)     printf '  • Kept your own Emacs config in %s.\n' "$EMACS_LINK" ;;
-    shadowed)
-      printf '  • Did not link the Emacs config: Emacs would load your %s instead.\n' "$EMACS_LINK"
-      printf '    Move it aside and re-run ./install.sh --link to use %s.\n' "$DOTFILES_DIR/emacs"
-      ;;
-    relinked) printf '  • Re-pointed %s at %s\n' "$EMACS_LINK" "$DOTFILES_DIR/emacs" ;;
-    linked)   printf '  • Linked your Emacs config %s -> %s\n' "$EMACS_LINK" "$DOTFILES_DIR/emacs" ;;
-    failed)   printf '  • %s was NOT linked (see the warning above).\n' "$EMACS_LINK" ;;
   esac
   late="$(late_lines "$CFG_RC")"
   if [ -n "$late" ]; then
