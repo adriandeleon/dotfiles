@@ -2,7 +2,7 @@
 # install.sh — bootstrap dotfiles on macOS (zsh/brew) or Debian (bash/apt).
 #
 #   1. Detects the OS.
-#   2. Installs the CLI packages listed in packages/{brew,apt}.txt, plus SDKMAN,
+#   2. Installs the CLI packages listed in packages/{brew,apt}.txt, plus jkit,
 #      the platform's shell framework (Oh My Bash on Debian, Oh My Zsh on
 #      macOS), and the JetBrains Mono Nerd Font.
 #   3. Adds the shell config to the native rc file (~/.bashrc on Debian,
@@ -18,7 +18,7 @@
 # Usage:
 #   ./install.sh            # install packages + configure shell
 #   ./install.sh --minimal  # lean subset (packages/*-minimal.txt) + shell config;
-#                           # skips SDKMAN, the shell framework, and the font
+#                           # skips jkit, the shell framework, and the font
 #   ./install.sh --link     # only configure the shell rc files, skip packages
 #   ./install.sh --packages # only install packages, skip shell config
 #
@@ -93,7 +93,7 @@ info "Detected OS: $OS"
 # --- Choose the package set (full vs --minimal) ------------------------------
 if [ "$MINIMAL" -eq 1 ]; then
   if [ "$DO_PACKAGES" -eq 1 ]; then
-    info "Minimal install: core packages only, skipping SDKMAN / framework / font."
+    info "Minimal install: core packages only, skipping jkit / framework / font."
   fi
   APT_LIST="$DOTFILES_DIR/packages/apt-minimal.txt"
   BREW_LIST="$DOTFILES_DIR/packages/brew-minimal.txt"
@@ -198,22 +198,65 @@ install_debian_packages() {
   fi
 }
 
-# --- SDKMAN (JVM SDK manager) ------------------------------------------------
-# Installed via its own script (not apt/brew); same on macOS and Debian.
-# rcupdate=false stops it appending its own init lines to ~/.bashrc/~/.zshrc:
-# shell/common.sh already sources sdkman-init.sh.
-install_sdkman() {
-  if [ -d "${SDKMAN_DIR:-$HOME/.sdkman}" ]; then
-    info "SDKMAN already installed."
+# --- jkit (JDK / Maven / Gradle manager) -------------------------------------
+# Downloaded from the jkit GitHub release (not in apt/brew yet) and checked
+# against the release's SHA256SUMS. Debian gets the .deb (installs
+# /usr/bin/jkit plus bash completion); macOS gets the single binary in
+# ~/.local/bin (needs macOS 15+). shell/common.sh loads its shell hook.
+# Bump JKIT_VERSION to move to a newer release.
+JKIT_VERSION="0.2.2"
+
+install_jkit() {
+  if command -v jkit >/dev/null 2>&1; then
+    info "jkit already installed."
     return
   fi
-  info "Installing SDKMAN..."
-  # Download first: piping straight into bash could run a partial script.
-  if ! sdk_script="$(curl -fsSL "https://get.sdkman.io?rcupdate=false")"; then
-    warn "Couldn't download the SDKMAN installer; skipping."
-    return
+  case "$(uname -m)" in
+    x86_64|amd64)  deb_arch="amd64"; tar_arch="x64" ;;
+    aarch64|arm64) deb_arch="arm64"; tar_arch="aarch64" ;;
+    *) warn "No jkit build for $(uname -m); skipping jkit."; return ;;
+  esac
+  case "$OS" in
+    debian) asset="jkit_${JKIT_VERSION}_${deb_arch}.deb" ;;
+    macos)  asset="jkit-${JKIT_VERSION}-macos-${tar_arch}.tar.gz" ;;
+    *) warn "No jkit installer for OS '$OS'; skipping jkit."; return ;;
+  esac
+  info "Installing jkit ($JKIT_VERSION)..."
+  base="https://github.com/adriandeleon/jkit/releases/download/v$JKIT_VERSION"
+  tmp="$(mktemp -d)"
+  # Readable by apt's sandbox user, so it doesn't complain about the .deb.
+  chmod 755 "$tmp"
+  if ! curl -fsSL -o "$tmp/$asset" "$base/$asset" \
+      || ! curl -fsSL -o "$tmp/SHA256SUMS" "$base/SHA256SUMS"; then
+    warn "Couldn't download jkit; skipping."
+    rm -rf "$tmp"; return
   fi
-  bash -c "$sdk_script" || warn "SDKMAN install failed; skipping."
+  expected="$(awk -v f="$asset" '$2 == f { print $1 }' "$tmp/SHA256SUMS")"
+  if command -v sha256sum >/dev/null 2>&1; then
+    actual="$(sha256sum "$tmp/$asset" | awk '{ print $1 }')"
+  else
+    actual="$(shasum -a 256 "$tmp/$asset" | awk '{ print $1 }')"
+  fi
+  if [ -z "$expected" ] || [ "$expected" != "$actual" ]; then
+    warn "jkit checksum didn't match; skipping."
+    rm -rf "$tmp"; return
+  fi
+  case "$OS" in
+    debian)
+      if [ "$(id -u)" -eq 0 ]; then sudo=""; else sudo="sudo"; fi
+      $sudo apt-get install -y "$tmp/$asset" || warn "jkit install failed; skipping."
+      ;;
+    macos)
+      if mkdir -p "$HOME/.local/bin" \
+          && tar -xzf "$tmp/$asset" -C "$tmp" \
+          && install -m 755 "$tmp/jkit" "$HOME/.local/bin/jkit"; then
+        info "jkit installed to ~/.local/bin/jkit"
+      else
+        warn "jkit install failed; skipping."
+      fi
+      ;;
+  esac
+  rm -rf "$tmp"
 }
 
 # --- Shell frameworks (Oh My Bash / Oh My Zsh) -------------------------------
@@ -294,10 +337,10 @@ if [ "$DO_PACKAGES" -eq 1 ]; then
     debian) install_debian_packages ;;
     *) warn "No package installer for OS '$OS'; skipping packages." ;;
   esac
-  # The full install adds SDKMAN, the shell framework, and the Nerd Font.
+  # The full install adds jkit, the shell framework, and the Nerd Font.
   # --minimal skips all three.
   if [ "$MINIMAL" -eq 0 ]; then
-    install_sdkman
+    install_jkit
     install_shell_frameworks
     install_font
   fi
@@ -440,13 +483,13 @@ disable_stock_history() {
 }
 
 # late_lines <rc> - lines *after* the include block that change PATH or
-# PROMPT_COMMAND, or load SDKMAN/nvm/cargo. Tools they add to PATH aren't seen
+# PROMPT_COMMAND, or load jkit/nvm/cargo. Tools they add to PATH aren't seen
 # by the alias checks, a PROMPT_COMMAND assignment drops zoxide's hook, and
-# SDKMAN lines load it a second time. Printed in the summary as a hint.
+# a jkit hook line loads it a second time. Printed in the summary as a hint.
 late_lines() {
   [ -f "$1" ] || return 0
   awk -v e="$BLOCK_END" '
-    after && /(^|[^A-Za-z_])(PATH|PROMPT_COMMAND)=|sdkman-init|cargo\/env|nvm\.sh/ { print "      " $0 }
+    after && /(^|[^A-Za-z_])(PATH|PROMPT_COMMAND)=|jkit hook|cargo\/env|nvm\.sh/ { print "      " $0 }
     $0 == e { after = 1 }' "$1"
 }
 
@@ -548,7 +591,7 @@ if [ "$DO_LINK" -eq 1 ]; then
   if [ -n "$late" ]; then
     printf '  • Note: these lines come after the dotfiles block in %s:\n%s\n' "$CFG_RC" "$late"
     printf '    Tools they put on PATH are not seen by the alias checks, a PROMPT_COMMAND\n'
-    printf '    assignment drops the zoxide hook, and SDKMAN lines load it a second time.\n'
+    printf '    assignment drops the zoxide hook, and a jkit hook line loads it a second time.\n'
     printf '    Consider moving them above the block.\n'
   fi
   printf '\n'

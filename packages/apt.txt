@@ -30,7 +30,7 @@ emacs            # provides emacsclient (the `ec` alias)
 jed              # lightweight text editor
 zoxide           # smarter cd
 p7zip-full       # 7z archives
-zip              # zip/unzip — also required by SDKMAN
+zip              # zip/unzip
 unzip
 fontconfig       # fc-cache — needed to register the Nerd Font
 less
