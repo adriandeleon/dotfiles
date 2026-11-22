@@ -21,7 +21,8 @@ framework + agnoster theme). The installer **appends** them to your existing
   environment, and functions in both, from shared scripts under `shell/`.
 - **Oh My Bash / Oh My Zsh** with the **agnoster** theme and the **JetBrains
   Mono Nerd Font** for the prompt glyphs.
-- **[SDKMAN](https://sdkman.io/)** for managing JVM SDKs (`sdk install …`).
+- **[jkit](https://github.com/adriandeleon/jkit)** for installing and switching
+  JDKs, Maven and Gradle (`jkit install jdk@21`, `jkit use jdk@21 --global`).
 - A curated **CLI toolset**, installed via apt or Homebrew:
   - *search & files:* ripgrep (`rg`), fd, bat, fzf, eza, tree, mc, ncdu, duf
   - *system:* htop, btop, fastfetch, tmux
@@ -75,9 +76,11 @@ The installer:
    unless you're already root — run the installer itself as yourself, not with
    `sudo`). If one package isn't available, it retries one package at a time
    so the rest still install, and lists the ones that failed.
-3. Installs [SDKMAN](https://sdkman.io/) (JVM SDK manager) via its own script
-   if it isn't already present, telling it not to edit your rc files. It's
-   wired up for both shells in `shell/common.sh`.
+3. Installs [jkit](https://github.com/adriandeleon/jkit) (JDK / Maven / Gradle
+   manager) from its GitHub release if it isn't already present, checked
+   against the release's SHA-256 sums: the `.deb` on Debian, or the binary into
+   `~/.local/bin` on macOS (macOS 15+). Its shell hook is loaded for both
+   shells in `shell/common.sh`.
 4. Clones the framework for your platform — [Oh My Bash](https://github.com/ohmybash/oh-my-bash)
    into `~/.oh-my-bash` on Debian, or [Oh My Zsh](https://github.com/ohmyzsh/ohmyzsh)
    into `~/.oh-my-zsh` on macOS (the **agnoster** theme is enabled either way).
@@ -90,7 +93,7 @@ The installer:
    up the file (timestamped copy) and appends a small managed include block that
    sources this repo's `bash/bashrc` / `zsh/zshrc`. Your original settings stay
    in place above the block. If your rc file already loads Oh My Bash/Zsh — or
-   SDKMAN, *above* the block — they aren't loaded a second time. On Debian it
+   the jkit hook, *above* the block — they aren't loaded a second time. On Debian it
    also comments out the stock `HISTSIZE=1000` / `HISTFILESIZE=2000` lines:
    bash truncates your history file as soon as `HISTFILESIZE` is set, so with
    them in place the larger limits here could never take effect. It won't add
@@ -104,8 +107,8 @@ The installer:
    aliases load after Oh My Bash/Zsh, so they win over the framework's.
 8. **Prints a summary** of exactly what it changed (and where it put backups),
    and ends with a warning count if any step failed. It also points out lines
-   *after* the block that change `PATH` or `PROMPT_COMMAND` or load SDKMAN, nvm
-   or cargo (later installers often append those): tools they add aren't seen
+   *after* the block that change `PATH` or `PROMPT_COMMAND` or load the jkit
+   hook, nvm or cargo (later installers often append those): tools they add aren't seen
    by the alias checks, and a `PROMPT_COMMAND=` assignment drops zoxide's hook.
    Move such lines above the block.
 
@@ -135,7 +138,7 @@ the minimal package set.
 (git, curl, fzf, ripgrep, bat, eza, htop, btop, duf, nmap, ncat, tmux, jed, plus
 zip, unzip and bash-completion on Debian) and still wires up your
 aliases/functions — but **skips**
-SDKMAN, the Oh My Bash/Zsh framework, and the Nerd Font. Good for servers or
+jkit, the Oh My Bash/Zsh framework, and the Nerd Font. Good for servers or
 throwaway boxes where you just want the essentials.
 
 It is safe to re-run; the include block is added only once and backups are

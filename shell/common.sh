@@ -46,22 +46,19 @@ if command -v fzf >/dev/null 2>&1; then
   unset _fzf_init
 fi
 
-unset _dotfiles_shell
-
-# SDKMAN - JVM SDK manager (java, gradle, maven...). Its init script supports
-# both bash and zsh. Skip it if your rc file already loaded it *above* the
-# include block (`sdk` exists), so it isn't initialised twice. (SDKMAN lines
-# below the block still run again afterwards; see the README.)
-if command -v sdk >/dev/null 2>&1; then
-  :
-elif [ -s "${SDKMAN_DIR:-$HOME/.sdkman}/bin/sdkman-init.sh" ]; then
-  export SDKMAN_DIR="${SDKMAN_DIR:-$HOME/.sdkman}"
-  . "$SDKMAN_DIR/bin/sdkman-init.sh"
+# jkit - JDK / Maven / Gradle manager. Its hook puts the global versions on
+# PATH, sets JAVA_HOME & co., wraps `jkit use` so it can switch the current
+# shell, and loads tab completion. Skipped if your rc file already loaded it
+# *above* the include block (`jkit` is a function), so it isn't run twice.
+if command -v jkit >/dev/null 2>&1 && [ "$(command -v jkit)" != jkit ]; then
+  eval "$(jkit hook "$_dotfiles_shell")"
 fi
+
+unset _dotfiles_shell
 
 # --- Aliases -----------------------------------------------------------------
 # Loaded after everything above, so our aliases (du -> du -h, mkdir -> mkdir
-# -p...) can't be baked into the functions that zoxide, fzf, SDKMAN and Oh My
+# -p...) can't be baked into the functions that zoxide, fzf, jkit and Oh My
 # Bash/Zsh define, and so ours win over the framework's. aliases.sh does
 # nothing unless _DOTFILES_LOADING_ALIASES is set, which makes the early copy
 # that Debian's stock ~/.bashrc sources (via ~/.bash_aliases) a no-op.

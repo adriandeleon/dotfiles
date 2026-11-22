@@ -5,7 +5,7 @@
 # the functions, the framework and the tool integrations. Debian's stock
 # ~/.bashrc also sources ~/.bash_aliases (which install.sh links here) much
 # earlier, and aliases that exist when a function is defined get baked into it
-# (e.g. `mkdir -p -p` inside SDKMAN). To reload aliases, use `reload`.
+# (e.g. `mkdir -p -p` inside a tool's functions). To reload aliases, use `reload`.
 if [ -z "${_DOTFILES_LOADING_ALIASES:-}" ]; then return 0; fi
 
 # --- Listing -----------------------------------------------------------------
