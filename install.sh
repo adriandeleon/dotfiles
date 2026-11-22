@@ -4,7 +4,8 @@
 #   1. Detects the OS.
 #   2. Installs the CLI packages listed in packages/{brew,apt}.txt, plus jkit,
 #      the platform's shell framework (Oh My Bash on Debian, Oh My Zsh on
-#      macOS), and the JetBrains Mono Nerd Font.
+#      macOS), and the JetBrains Mono Nerd Font. On Debian it also adds the
+#      Vitrina apt repository (vitrina-project.dev), which jkit comes from.
 #   3. Adds the shell config to the native rc file (~/.bashrc on Debian,
 #      ~/.zshrc on macOS) by backing it up and appending an include block (your
 #      file is NOT replaced). In ~/.bashrc it also comments out Debian's stock
@@ -18,9 +19,12 @@
 # Usage:
 #   ./install.sh            # install packages + configure shell
 #   ./install.sh --minimal  # lean subset (packages/*-minimal.txt) + shell config;
-#                           # skips jkit, the shell framework, and the font
+#                           # skips Vitrina, jkit, the shell framework, and the font
 #   ./install.sh --link     # only configure the shell rc files, skip packages
 #   ./install.sh --packages # only install packages, skip shell config
+#   ./install.sh --version  # print the dotfiles version (VERSION + git commit)
+#   ./install.sh --doctor   # check the setup and say how to fix problems
+#                           # (same as `dotdoctor` in a shell; changes nothing)
 #
 # Options can be combined, e.g. `--minimal --packages`.
 # Run it as yourself, not with sudo: it asks for sudo when installing packages.
@@ -30,11 +34,15 @@ set -euo pipefail
 DO_PACKAGES=1
 DO_LINK=1
 MINIMAL=0
+SHOW_VERSION=0
+DOCTOR=0
 for arg in "$@"; do
   case "$arg" in
     --minimal)  MINIMAL=1 ;;
     --link)     DO_PACKAGES=0 ;;
     --packages) DO_LINK=0 ;;
+    --version|-V) SHOW_VERSION=1 ;;
+    --doctor)   DOCTOR=1 ;;
     # Print only the header comment block (stops at the first non-comment line).
     --help|-h)  awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "$0"; exit 0 ;;
     *) echo "unknown option: $arg (try --help)" >&2; exit 1 ;;
@@ -58,6 +66,31 @@ fi
 # make every run think the repo has moved.
 DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 export DOTFILES="$DOTFILES_DIR"
+
+# dotfiles_version - "dotfiles 1.0.0 (4df2b00)": the VERSION file, plus the
+# commit (marked -dirty with uncommitted changes) when this is a git checkout.
+# Same output as _dotfiles_version in shell/functions.sh; keep them in sync.
+dotfiles_version() {
+  local v c
+  v="$(sed -n '1s/[[:space:]]*$//p' "$DOTFILES_DIR/VERSION" 2>/dev/null || true)"
+  c="$(git -C "$DOTFILES_DIR" rev-parse --short HEAD 2>/dev/null || true)"
+  if [ -n "$c" ] && ! git -C "$DOTFILES_DIR" diff --quiet HEAD -- 2>/dev/null; then
+    c="$c-dirty"
+  fi
+  printf 'dotfiles %s%s\n' "${v:-unknown}" "${c:+ ($c)}"
+}
+if [ "$SHOW_VERSION" -eq 1 ]; then dotfiles_version; exit 0; fi
+
+# --doctor: run dotdoctor (shell/functions.sh) in a new interactive shell of
+# the platform's kind, so it sees your rc files the way a new terminal does.
+# If the rc file doesn't load the config, the functions are loaded directly.
+# Changes nothing; exits 1 when a check fails.
+if [ "$DOCTOR" -eq 1 ]; then
+  case "$(uname -s)" in Darwin) doctor_shell=zsh ;; *) doctor_shell=bash ;; esac
+  # shellcheck disable=SC2016  # expanded by the inner shell
+  DOTFILES="$DOTFILES_DIR" exec "$doctor_shell" -ic \
+    'typeset -f dotdoctor >/dev/null 2>&1 || . "$DOTFILES/shell/functions.sh"; dotdoctor'
+fi
 
 # The path is written into your rc file inside double quotes, so refuse
 # characters that would break out of them (or run code at every shell start).
@@ -88,6 +121,7 @@ case "$(uname -s)" in
     fi
     ;;
 esac
+info "$(dotfiles_version)"
 info "Detected OS: $OS"
 
 # --- Choose the package set (full vs --minimal) ------------------------------
@@ -160,6 +194,46 @@ install_macos_packages() {
   fi
 }
 
+# --- Vitrina apt repository (Debian, full install) ---------------------------
+# https://vitrina-project.dev: signed apt repository for jkit (installed from
+# it below) and other apps by the same author. Added after the apt packages
+# (it needs their curl); after that, `apt upgrade` keeps its packages current.
+# The key is pinned by SHA-256 (release key fingerprint
+# 8486A7AF4FC8FEE93D83CDB4EA5FA138C2C09C4A); update the hash if it's re-issued.
+VITRINA_URL="https://vitrina-project.dev"
+VITRINA_KEY_SHA256="c52063071b216564a412cfec5c4e939ea0462248d6cb60b74d91917ec345067d"
+VITRINA_READY=0   # a Vitrina source is configured
+VITRINA_ADDED=0   # ...and this run added it (apt needs a refresh)
+SUDO=""
+
+add_vitrina_repo() {
+  # Already set up (by an earlier run, or by hand): leave that source alone.
+  if grep -rqs 'vitrina-project\.dev' /etc/apt/sources.list /etc/apt/sources.list.d; then
+    info "Vitrina apt repository already configured."
+    VITRINA_READY=1
+    return
+  fi
+  arch="$(dpkg --print-architecture 2>/dev/null || true)"
+  case "$arch" in
+    amd64|arm64) ;;
+    *) info "Vitrina has no packages for '${arch:-unknown}'; not adding it."; return ;;
+  esac
+  info "Adding the Vitrina apt repository..."
+  tmp="$(mktemp -d)"
+  if curl -fsSL -o "$tmp/vitrina.asc" "$VITRINA_URL/vitrina.asc" \
+      && printf '%s  %s\n' "$VITRINA_KEY_SHA256" "$tmp/vitrina.asc" | sha256sum -c --quiet - \
+      && $SUDO install -d -m 0755 /etc/apt/keyrings \
+      && $SUDO install -m 0644 "$tmp/vitrina.asc" /etc/apt/keyrings/vitrina.asc \
+      && printf 'Types: deb\nURIs: %s/apt\nSuites: stable\nComponents: main\nArchitectures: %s\nSigned-By: /etc/apt/keyrings/vitrina.asc\n' \
+           "$VITRINA_URL" "$arch" | $SUDO tee /etc/apt/sources.list.d/vitrina.sources >/dev/null; then
+    VITRINA_READY=1; VITRINA_ADDED=1
+    info "Added /etc/apt/sources.list.d/vitrina.sources"
+  else
+    warn "Couldn't add the Vitrina apt repository (download, key check or write failed); jkit will come from its GitHub release."
+  fi
+  rm -rf "$tmp"
+}
+
 install_debian_packages() {
   if [ "$(id -u)" -eq 0 ]; then
     SUDO=""
@@ -196,21 +270,77 @@ install_debian_packages() {
     done
     if [ -n "$failed" ]; then warn "Couldn't install these apt packages:$failed"; fi
   fi
+
+  # Vitrina goes in after the packages above, which bring curl and
+  # ca-certificates (a fresh Debian has neither). A newly added source needs
+  # one more refresh before jkit can be installed from it. --minimal adds no
+  # third-party sources.
+  if [ "$MINIMAL" -eq 0 ]; then
+    add_vitrina_repo
+    if [ "$VITRINA_ADDED" -eq 1 ]; then
+      $SUDO apt-get update || warn "apt-get update reported errors after adding Vitrina; continuing."
+    fi
+  fi
 }
 
 # --- jkit (JDK / Maven / Gradle manager) -------------------------------------
-# Downloaded from the jkit GitHub release (not in apt/brew yet) and checked
-# against the release's SHA256SUMS. Debian gets the .deb (installs
-# /usr/bin/jkit plus bash completion); macOS gets the single binary in
-# ~/.local/bin (needs macOS 15+). shell/common.sh loads its shell hook.
-# Bump JKIT_VERSION to move to a newer release.
+# On Debian it comes from the Vitrina apt repository when that was added, so
+# `apt upgrade` keeps it current. Otherwise (or if Vitrina's is older than
+# JKIT_VERSION) it is downloaded from the jkit GitHub release and checked
+# against the release's SHA256SUMS: the .deb on Debian (installs /usr/bin/jkit
+# plus bash completion), the single binary in ~/.local/bin on macOS (needs
+# macOS 15+). shell/common.sh loads its shell hook.
+# Bump JKIT_VERSION to move to a newer release: an older jkit is upgraded on
+# the next run, while the same or a newer one is left alone.
 JKIT_VERSION="0.2.2"
 
+# version_lt <a> <b> - true if dotted version <a> is older than <b>.
+version_lt() {
+  awk -v a="$1" -v b="$2" 'BEGIN {
+    n = split(a, x, "."); m = split(b, y, "."); if (m > n) n = m
+    for (i = 1; i <= n; i++) {
+      if (x[i] + 0 < y[i] + 0) exit 0
+      if (x[i] + 0 > y[i] + 0) exit 1
+    }
+    exit 1 }'
+}
+
+# find_jkit - sets jkit_bin to the installed jkit (empty if none) and have to
+# its version (empty if unknown). ~/.local/bin is where the macOS install puts
+# it, and it may not be on PATH yet (a shell that hasn't loaded this config).
+find_jkit() {
+  jkit_bin="$(command -v jkit 2>/dev/null || true)"
+  if [ -z "$jkit_bin" ] && [ -x "$HOME/.local/bin/jkit" ]; then
+    jkit_bin="$HOME/.local/bin/jkit"
+  fi
+  have=""
+  if [ -n "$jkit_bin" ]; then
+    # `jkit --version` prints "jkit 0.2.2".
+    have="$("$jkit_bin" --version 2>/dev/null | awk 'NR == 1 { print $NF }' || true)"
+  fi
+}
+
 install_jkit() {
-  if command -v jkit >/dev/null 2>&1; then
-    info "jkit already installed."
+  find_jkit
+  if [ -n "$jkit_bin" ] && { [ -z "$have" ] || ! version_lt "$have" "$JKIT_VERSION"; }; then
+    info "jkit ${have:-(unknown version)} already installed."
     return
   fi
+  if [ "$OS" = debian ] && [ "$VITRINA_READY" -eq 1 ]; then
+    info "Installing jkit from the Vitrina apt repository..."
+    if $SUDO apt-get install -y jkit; then
+      find_jkit
+      if [ -n "$have" ] && ! version_lt "$have" "$JKIT_VERSION"; then
+        info "jkit $have installed from Vitrina."
+        return
+      fi
+      info "Vitrina's jkit (${have:-unknown version}) is older than $JKIT_VERSION; using the GitHub release instead."
+    else
+      info "Couldn't install jkit from Vitrina; using the GitHub release instead."
+      find_jkit
+    fi
+  fi
+  if [ -n "$jkit_bin" ]; then info "Upgrading jkit ${have:-?} -> $JKIT_VERSION..."; fi
   case "$(uname -m)" in
     x86_64|amd64)  deb_arch="amd64"; tar_arch="x64" ;;
     aarch64|arm64) deb_arch="arm64"; tar_arch="aarch64" ;;
@@ -221,7 +351,7 @@ install_jkit() {
     macos)  asset="jkit-${JKIT_VERSION}-macos-${tar_arch}.tar.gz" ;;
     *) warn "No jkit installer for OS '$OS'; skipping jkit."; return ;;
   esac
-  info "Installing jkit ($JKIT_VERSION)..."
+  [ -n "$jkit_bin" ] || info "Installing jkit ($JKIT_VERSION)..."
   base="https://github.com/adriandeleon/jkit/releases/download/v$JKIT_VERSION"
   tmp="$(mktemp -d)"
   # Readable by apt's sandbox user, so it doesn't complain about the .deb.
@@ -243,8 +373,7 @@ install_jkit() {
   fi
   case "$OS" in
     debian)
-      if [ "$(id -u)" -eq 0 ]; then sudo=""; else sudo="sudo"; fi
-      $sudo apt-get install -y "$tmp/$asset" || warn "jkit install failed; skipping."
+      $SUDO apt-get install -y "$tmp/$asset" || warn "jkit install failed; skipping."
       ;;
     macos)
       if mkdir -p "$HOME/.local/bin" \

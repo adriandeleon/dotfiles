@@ -40,6 +40,7 @@ Tested on **Debian 13 (trixie)** and **macOS**. A leaner subset is available via
 ```text
 .
 ├── install.sh            # bootstrap: install packages + configure shells
+├── VERSION               # the dotfiles version (see Versioning)
 ├── .shellcheckrc         # lint settings (CI: .github/workflows/lint.yml)
 ├── packages/
 │   ├── apt.txt           # CLI tools for Debian (apt)
@@ -75,12 +76,19 @@ The installer:
    (installing Homebrew first on macOS if needed; on Debian it uses `sudo`
    unless you're already root — run the installer itself as yourself, not with
    `sudo`). If one package isn't available, it retries one package at a time
-   so the rest still install, and lists the ones that failed.
+   so the rest still install, and lists the ones that failed. On Debian it
+   then adds the [Vitrina](https://vitrina-project.dev) apt repository
+   (`/etc/apt/sources.list.d/vitrina.sources`, with its signing key checked
+   against a pinned SHA-256), unless a Vitrina source is already configured.
 3. Installs [jkit](https://github.com/adriandeleon/jkit) (JDK / Maven / Gradle
-   manager) from its GitHub release if it isn't already present, checked
-   against the release's SHA-256 sums: the `.deb` on Debian, or the binary into
-   `~/.local/bin` on macOS (macOS 15+). Its shell hook is loaded for both
-   shells in `shell/common.sh`.
+   manager). On Debian it comes from Vitrina, so `apt upgrade` keeps it
+   current. If Vitrina couldn't be added or its jkit is older than the pinned
+   version (`JKIT_VERSION` in `install.sh`), and on macOS, it's downloaded from
+   the GitHub release instead, checked against the release's SHA-256 sums: the
+   `.deb` on Debian, or the binary into `~/.local/bin` on macOS (macOS 15+).
+   It's skipped if the pinned version or a newer one is already installed, and
+   an older one is upgraded. Its shell hook is loaded for both shells in
+   `shell/common.sh`.
 4. Clones the framework for your platform — [Oh My Bash](https://github.com/ohmybash/oh-my-bash)
    into `~/.oh-my-bash` on Debian, or [Oh My Zsh](https://github.com/ohmyzsh/ohmyzsh)
    into `~/.oh-my-zsh` on macOS (the **agnoster** theme is enabled either way).
@@ -128,6 +136,8 @@ Options:
 ./install.sh --minimal    # lean subset of packages + shell config only
 ./install.sh --link       # only configure the rc files, skip packages
 ./install.sh --packages   # only install packages, skip shell config
+./install.sh --version    # print the dotfiles version
+./install.sh --doctor     # check the setup and say how to fix problems
 ./install.sh --help
 ```
 
@@ -138,7 +148,7 @@ the minimal package set.
 (git, curl, fzf, ripgrep, bat, eza, htop, btop, duf, nmap, ncat, tmux, jed, plus
 zip, unzip and bash-completion on Debian) and still wires up your
 aliases/functions — but **skips**
-jkit, the Oh My Bash/Zsh framework, and the Nerd Font. Good for servers or
+the Vitrina apt repository, jkit, the Oh My Bash/Zsh framework, and the Nerd Font. Good for servers or
 throwaway boxes where you just want the essentials.
 
 It is safe to re-run; the include block is added only once and backups are
@@ -149,13 +159,51 @@ file alone and asks you to fix it by hand. The checkout path can't contain
 `"`, `$`, backtick or backslash characters (it's written into your rc file).
 
 `dothelp` only lists what's actually installed, so after `--minimal` it hides the
-fd- and zoxide-based helpers.
+fd-, zoxide- and jkit-based helpers.
 
 ## Cheat-sheet
 
 Once installed, run **`dothelp`** in any bash or zsh session to print a grouped
 summary of the aliases, functions, fzf helpers, and tools this setup adds —
 handy when you forget what's available.
+
+## Doctor
+
+When something seems off, run **`dotdoctor`** in your shell (or
+`./install.sh --doctor`, which runs it in a fresh one). It checks the setup and
+prints one line per check — `ok`, `info`, `warn` or `fail` — with a `fix:` line
+under anything that needs one, then a summary, in the same format as
+`jkit doctor`:
+
+```console
+$ dotdoctor
+ok    dotfiles 1.0.0 (4df2b00), in /home/me/.dotfiles
+ok    /home/me/.bashrc loads this checkout
+warn  lines after the include block in /home/me/.bashrc change PATH or PROMPT_COMMAND, or load tools
+      fix: move these above the block:
+        eval "$(jkit hook bash)"
+ok    Oh My Bash loaded (theme agnoster)
+ok    shared functions defined
+ok    zoxide hook active
+ok    jkit 0.2.2, shell hook loaded
+1 warning, 0 problems
+```
+
+It looks at the include block (exactly one, pointing at this checkout), lines
+after it that change `PATH`/`PROMPT_COMMAND` or load tools, Debian's stock
+history limits, the aliases file, the framework, the shared functions and
+aliases, core and optional tools, zoxide's hook, jkit (hook loaded, not older
+than `JKIT_VERSION`), the Vitrina apt source, and the Nerd Font. It changes
+nothing, uses no network, and exits 1 when a check fails.
+
+## Versioning
+
+The version lives in [`VERSION`](VERSION) ([semver](https://semver.org)).
+`./install.sh --version` and `dothelp --version` print it with the git commit
+(marked `-dirty` with uncommitted changes), e.g. `dotfiles 1.0.0 (4df2b00)`;
+the installer also prints it as its first line, and `dothelp` in its header.
+To release, bump `VERSION` in the pull request, then tag the merge commit
+`vX.Y.Z`.
 
 ## Customizing
 

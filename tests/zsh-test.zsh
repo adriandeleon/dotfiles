@@ -13,7 +13,7 @@ trap 'rm -rf "$WORK"' EXIT
 BEGIN="# >>> dotfiles (managed by install.sh) >>>"
 END="# <<< dotfiles (managed by install.sh) <<<"
 TEST_PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
-FUNCS=(up mkcd gb fh ovim dothelp cdf vimf extract)
+FUNCS=(up mkcd gb fh ovim dothelp dotdoctor cdf vimf extract)
 fails=0
 
 pass() { print -r -- "ok   - $1"; }
@@ -103,6 +103,14 @@ check "framework loads once, also on reload" \
   same "$(interactive $h '. ~/.zshrc; print -r -- "loads=$FAKE_OMZ_LOADS status=$?"')" "loads=1 status=0"
 check "dothelp runs and cleans up helpers" \
   same "$(interactive $h 'dothelp >/dev/null && print ok; (( $+functions[_dothelp_row] )) || print gone')" $'ok\ngone'
+check "dothelp --version reads VERSION" \
+  same "$(interactive $h 'dothelp --version' | cut -d' ' -f1-2)" "dotfiles $(sed -n 1p $REPO/VERSION)"
+out=$(interactive $h 'dotdoctor; print -r -- "doctor-exit=$?"')
+check "doctor: exits 0, no fail lines" \
+  same "$(print -r -- $out | grep -cE '^fail|^doctor-exit=[^0]')" "0"
+check "doctor: sees the framework"     grep -q '^ok    Oh My Zsh loaded' <<<$out
+check "doctor: cleans up its helpers" \
+  same "$(interactive $h 'dotdoctor >/dev/null; (( $+functions[_dotdoctor_line] )) || print gone')" "gone"
 print 'export EDITOR=nano' > $h/.shell.local
 check "EDITOR from ~/.shell.local wins"    same "$(interactive $h 'print -r -- $EDITOR')" "nano"
 rm -f $h/.shell.local

@@ -12,7 +12,7 @@ BEGIN="# >>> dotfiles (managed by install.sh) >>>"
 END="# <<< dotfiles (managed by install.sh) <<<"
 SKEL=/etc/skel/.bashrc
 TEST_PATH="/usr/local/bin:/usr/bin:/bin"
-FUNCS="up mkcd gb fh ovim dothelp cdf vimf extract"
+FUNCS="up mkcd gb fh ovim dothelp dotdoctor cdf vimf extract"
 FAILS=0
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -216,6 +216,28 @@ ln -s "$WORK/does-not-exist" "$h/.bashrc"
 link "$h"; status=$?
 check "dangling rc symlink: install exits 0" [ "$status" = 0 ]
 check "dangling rc symlink: warns"           grep -q 'broken symlink' "$h/install.log"
+
+# --- Version and doctor ------------------------------------------------------
+h="$(new_home doctor)"
+link "$h"
+version="$(clean_env "$h" "$REPO/install.sh" --version)"
+check "install.sh --version reads VERSION"   [ "${version%% (*}" = "dotfiles $(sed -n 1p "$REPO/VERSION")" ]
+check "dothelp --version matches it"         [ "$(interactive "$h" 'dothelp --version')" = "$version" ]
+out="$(interactive "$h" 'dotdoctor; echo "doctor-exit=$?"')"
+check "doctor: healthy install exits 0"      grep -qx 'doctor-exit=0' <<<"$out"
+check "doctor: healthy install has no fail lines" [ "$(grep -c '^fail' <<<"$out")" = 0 ]
+check "doctor: sees the include block"       grep -q '^ok    .*loads this checkout' <<<"$out"
+check "doctor: cleans up its helpers" \
+  [ "$(interactive "$h" 'dotdoctor >/dev/null; type -t _dotdoctor_line || echo gone')" = gone ]
+out="$(clean_env "$h" "$REPO/install.sh" --doctor 2>/dev/null)"; status=$?
+check "install.sh --doctor runs it, exit 0"  [ "$status" = 0 ]
+check "install.sh --doctor prints a summary" grep -qE '^(no problems found|[0-9]+ warnings?, 0 problems)$' <<<"$out"
+# A second (empty) include block and a PROMPT_COMMAND reset after the block.
+printf '%s\n%s\nPROMPT_COMMAND=true\n' "$BEGIN" "$END" >> "$h/.bashrc"
+out="$(interactive "$h" 'dotdoctor; echo "doctor-exit=$?"')"
+check "doctor: two include blocks is a fail" grep -q '^fail  .*has 2 dotfiles include blocks' <<<"$out"
+check "doctor: flags lines after the block"  grep -q '^warn  lines after the include block' <<<"$out"
+check "doctor: exits 1 on a fail"            grep -qx 'doctor-exit=1' <<<"$out"
 
 # --- Messages ----------------------------------------------------------------
 h="$(new_home minimal-link)"
